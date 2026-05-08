@@ -1,0 +1,51 @@
+apiVersion: v2
+name: ohs
+description: Open Health Stack - Kubernetes Helm deployment for federated EHR/FHIR/OMOP platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - healthcare
+  - ehr
+  - fhir
+  - omop
+  - ehrbase
+home: https://github.com/yourusername/ohs-open-health-stack
+sources:
+  - https://github.com/ehrbase/ehrbase
+  - https://github.com/openfhir/openfhir
+  - https://github.com/SevKohler/Eos
+maintainers:
+  - name: Your Name
+    email: your.email@example.org
+
+# All subcharts live as local directories under charts/.
+# Conditions map to the top-level keys in values.yaml so components can be toggled.
+# Run `helm dependency update` once after cloning to generate Chart.lock.
+#
+# NOTE: cloudnative-pg and mongodb-operator charts contain no templates yet.
+# Install the real operators as prerequisites before deploying OHS:
+#   helm repo add cnpg https://cloudnative-pg.github.io/charts
+#   helm install cnpg-system cnpg/cloudnative-pg -n cnpg-system --create-namespace
+#   helm repo add mongodb https://mongodb.github.io/helm-charts
+#   helm install mongodb-operator mongodb/community-operator -n mongodb-operator --create-namespace
+dependencies:
+  # Operators (placeholder local charts; see note above)
+  - name: cloudnative-pg
+    version: "0.1.0"
+    condition: cloudnative-pg.enabled
+  - name: mongodb-operator
+    version: "0.1.0"
+    condition: mongodb-operator.enabled
+
+  # Core application charts
+  - name: ehrbase
+    version: "0.1.0"
+    condition: ehrbase.enabled
+  - name: eos
+    version: "0.1.0"
+    condition: eos.enabled
+  - name: openfhir
+    version: "0.1.0"
+    condition: openfhir.enabled
+

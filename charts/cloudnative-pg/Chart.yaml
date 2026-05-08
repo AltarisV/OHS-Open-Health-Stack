@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cloudnative-pg
+description: CloudNativePG operator for PostgreSQL cluster management in OHS
+type: application
+version: 0.1.0
+appVersion: "1.21.0"
+home: https://cloudnative-pg.io/
+sources:
+  - https://github.com/cloudnative-pg/cloudnative-pg
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

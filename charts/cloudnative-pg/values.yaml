@@ -1,0 +1,42 @@
+# CloudNativePG Operator Configuration
+# This subchart declares CloudNativePG as a dependency and configures it for OHS.
+
+# CloudNativePG operator settings
+operator:
+  enabled: true
+  
+  # Operator image
+  image:
+    repository: "ghcr.io/cloudnative-pg/cloudnative-pg"
+    tag: "1.21.0"  # PIN_VERSION: match operator version
+    pullPolicy: "IfNotPresent"
+  
+  # Operator pod settings
+  replicas: 1  # Operator can run with 1 replica (high-availability upgrade in Phase N)
+  
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  
+  # RBAC configuration
+  rbac:
+    create: true  # CloudNativePG requires cluster-wide RBAC
+
+# CRD (Custom Resource Definition) installation
+crds:
+  create: true  # Install CloudNativePG CRDs
+
+# Monitoring (Prometheus)
+monitoring:
+  enabled: false  # Enable if Prometheus is running in cluster
+  serviceMonitor:
+    enabled: false
+
+# Pod Disruption Budget (ensures minimum replicas during maintenance)
+podDisruptionBudget:
+  enabled: false  # Enable for production HA
+

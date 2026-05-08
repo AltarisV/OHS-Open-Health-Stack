@@ -1,0 +1,166 @@
+{{- if .Values.postgres.enabled }}
+---
+# PostgreSQL Cluster for EHRbase
+{{- if .Values.postgres.ehrbase.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-cluster
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: postgres
+    component: ehrbase-database
+    release: {{ .Release.Name }}
+  annotations:
+    # Deploy after all other resources so the CloudNativePG operator CRD is registered
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  # Number of PostgreSQL instances (HA replicas)
+  instances: {{ .Values.postgres.ehrbase.instances | default 3 }}
+  
+  # Primary update strategy
+  primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
+  
+  # PostgreSQL version and image
+  imageName: "ghcr.io/cloudnative-pg/postgresql:15-alpine"  # PIN_VERSION
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+      effective_cache_size: "1GB"
+      maintenance_work_mem: "64MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      work_mem: "1280kB"
+      min_wal_size: "2GB"
+      max_wal_size: "8GB"
+  
+  # Bootstrap configuration (initial database setup)
+  bootstrap:
+    initdb:
+      database: "ehrbase"
+      owner: "ehrbase"
+      postInitApplicationSQL:
+        # Create initial schemas and roles
+        - "CREATE SCHEMA IF NOT EXISTS ehrbase;"
+        - "CREATE SCHEMA IF NOT EXISTS eos_omop;"
+        - "GRANT USAGE ON SCHEMA ehrbase TO ehrbase;"
+        - "GRANT USAGE ON SCHEMA eos_omop TO eos;"
+        - "ALTER DEFAULT PRIVILEGES IN SCHEMA ehrbase GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ehrbase;"
+        - "ALTER DEFAULT PRIVILEGES IN SCHEMA eos_omop GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eos;"
+  
+  # Storage configuration
+  storage:
+    size: {{ .Values.postgres.ehrbase.storage | default "10Gi" }}
+    storageClass: ""  # Uses default storage class; change if needed
+  
+  # WAL (Write-Ahead Log) storage
+  walStorage:
+    size: {{ .Values.postgres.ehrbase.walStorage | default "5Gi" }}
+    storageClass: ""
+  
+  # Backup configuration
+  backup:
+    barmanObjectStore:
+      # For MVP, backups can use a local PVC or S3 bucket
+      # This is a placeholder; configure S3 for production
+      wal:
+        compression: gzip
+        maxParallel: 4
+      data:
+        compression: gzip
+      recoveryWindowInDays: {{ 30 }}  # Retention policy (30 days)
+      # s3Credentials:
+      #   secretKeyRef:
+      #     name: backup-s3-creds
+      #     key: accessKeyId
+      # s3Credentials:
+      #   secretKeyRef:
+      #     name: backup-s3-creds
+      #     key: secretAccessKey
+      # Placeholder: use local backup for development
+  
+  # Monitoring and observability
+  monitoring:
+    enabled: {{ .Values.monitoring.enabled | default false }}
+    pgpassFile: ""
+  
+  # Resource requests and limits
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+{{- end }}
+
+# PostgreSQL Cluster for Eos (OMOP CDM)
+{{- if .Values.postgres.eos.enabled }}
+{{- if not .Values.postgres.eos.sharedCluster }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-eos-cluster
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: postgres
+    component: eos-database
+    release: {{ .Release.Name }}
+spec:
+  instances: {{ .Values.postgres.eos.instances | default 2 }}
+  primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
+  
+  imageName: "ghcr.io/cloudnative-pg/postgresql:15-alpine"
+  postgresql:
+    parameters:
+      max_connections: "300"
+      shared_buffers: "512MB"
+      effective_cache_size: "2GB"
+      maintenance_work_mem: "128MB"
+  
+  bootstrap:
+    initdb:
+      database: "eos_omop"
+      owner: "eos"
+      postInitApplicationSQL:
+        - "CREATE SCHEMA IF NOT EXISTS eos_omop;"
+        - "GRANT USAGE ON SCHEMA eos_omop TO eos;"
+        - "ALTER DEFAULT PRIVILEGES IN SCHEMA eos_omop GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eos;"
+  
+  storage:
+    size: {{ .Values.postgres.eos.storage | default "50Gi" }}
+  
+  walStorage:
+    size: {{ .Values.postgres.eos.storage | default "50Gi" | divideAmount 10 }}
+  
+  backup:
+    barmanObjectStore:
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+      recoveryWindowInDays: 30
+  
+  monitoring:
+    enabled: {{ .Values.monitoring.enabled | default false }}
+  
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+{{- end }}
+{{- end }}
+
+{{- end }}

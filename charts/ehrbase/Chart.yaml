@@ -1,0 +1,12 @@
+apiVersion: v2
+name: ehrbase
+description: EHRbase - EHR storage system (openEHR implementation)
+type: application
+version: 0.1.0
+appVersion: "2.31.0"
+home: https://www.ehrbase.org/
+sources:
+  - https://github.com/ehrbase/ehrbase
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

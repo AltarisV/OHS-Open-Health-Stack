@@ -1,0 +1,170 @@
+{{- if .Values.mongodb.enabled }}
+---
+# MongoDB Replica Set for openFHIR
+{{- if .Values.mongodb.openfhir.enabled }}
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: mongodb-cluster
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    component: openfhir-database
+    release: {{ .Release.Name }}
+  annotations:
+    # Deploy after all other resources so the MongoDB Community Operator CRD is registered
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  # MongoDB version
+  version: "6.0.6"  # PIN_VERSION: check MongoDB Community Operator compatibility
+  
+  # Replica set members
+  members: {{ .Values.mongodb.openfhir.replicas | default 3 }}
+  
+  # Type of MongoDB deployment
+  type: ReplicaSet
+  
+  # Security context
+  security:
+    authentication:
+      modes:
+        - SCRAM
+    tls:
+      enabled: false  # Enable TLS for production (requires cert-manager)
+      #certificateKeySecret:
+      #  name: mongodb-tls-cert
+  
+  # Administrative credentials
+  users:
+    - name: root
+      db: admin
+      passwordSecretRef:
+        name: mongodb-root-password
+      roles:
+        - name: root
+          db: admin
+    
+    - name: openfhir
+      db: openfhir
+      passwordSecretRef:
+        name: mongodb-openfhir-password
+      roles:
+        - name: readWrite
+          db: openfhir
+  
+  # Persistent storage
+  statefulSet:
+    spec:
+      selector: {}
+      serviceName: mongodb-cluster-svc
+      replicas: {{ .Values.mongodb.openfhir.replicas | default 3 }}
+      template:
+        metadata:
+          labels:
+            app: mongodb
+            release: {{ .Release.Name }}
+        spec:
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: app
+                          operator: In
+                          values:
+                            - mongodb
+                    topologyKey: kubernetes.io/hostname
+          
+          terminationGracePeriodSeconds: 10
+          
+          containers:
+            - name: mongod
+              image: "mongo:6.0.6-alpine"  # PIN_VERSION
+              
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "1Gi"
+              
+              ports:
+                - containerPort: 27017
+              
+              livenessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -c
+                    - mongo --eval "db.adminCommand('ping')"
+                initialDelaySeconds: 30
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 3
+              
+              readinessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -c
+                    - mongo --eval "db.adminCommand('ping')"
+                initialDelaySeconds: 10
+                periodSeconds: 5
+                timeoutSeconds: 3
+                failureThreshold: 3
+              
+              volumeMounts:
+                - name: data-volume
+                  mountPath: /data/db
+      
+      volumeClaimTemplates:
+        - metadata:
+            name: data-volume
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            storageClassName: ""  # Uses default storage class
+            resources:
+              requests:
+                storage: {{ .Values.mongodb.openfhir.storage | default "20Gi" }}
+  
+  # Monitoring (optional)
+  #prometheusPasswordSecretRef:
+  #  name: mongodb-prometheus-password
+
+{{- end }}
+
+# Create Kubernetes Secret for MongoDB root password
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-root-password
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    release: {{ .Release.Name }}
+type: Opaque
+stringData:
+  password: {{ .Values.mongodb.openfhir.rootPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
+
+# Create Kubernetes Secret for openFHIR MongoDB user password
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-openfhir-password
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    release: {{ .Release.Name }}
+type: Opaque
+stringData:
+  password: {{ .Values.mongodb.openfhir.rootPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
+
+{{- end }}

@@ -1,0 +1,68 @@
+# Helm
+charts/*/Chart.lock
+charts/*/charts/
+*.tgz
+
+# Secrets and sensitive data
+secrets.yaml
+secrets-*.yaml
+*-secret.yaml
+.env
+.env.local
+*.key
+*.pem
+*.crt
+*.p12
+sealed-secrets.yaml
+
+# Kubernetes configurations and temporary files
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.code-workspace
+
+# Build and temp
+dist/
+build/
+*.log
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+env/
+
+# Docker build artifacts
+.docker-build/
+*.tar
+*.tar.gz
+
+# Package managers
+.npm
+.yarn
+
+# OS and shell
+*.sh.bak
+*.tmp
+
+# Local development overrides
+values-local.yaml
+values-dev.yaml
+
+# Generated files from helm template (for testing)
+manifests/
+rendered-*.yaml
+
+# Private registry credentials
+.docker/config.json
+.dockercfg
+

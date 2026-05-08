@@ -1,0 +1,12 @@
+apiVersion: v2
+name: eos
+description: Eos - OMOP Bridge ETL tool
+type: application
+version: 0.1.0
+appVersion: "0.0.62"
+home: https://github.com/SevKohler/Eos
+sources:
+  - https://github.com/SevKohler/Eos
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

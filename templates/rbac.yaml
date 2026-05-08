@@ -1,0 +1,105 @@
+{{- if .Values.rbac.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.rbac.name | default .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-operator
+  labels:
+    app: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+rules:
+# CloudNativePG operator rules
+- apiGroups: ["postgresql.cnpg.io"]
+  resources: ["clusters", "clusterbookmarks"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# MongoDB operator rules
+- apiGroups: ["mongodbcommunity.mongodb.com"]
+  resources: ["mongodbcommunity"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# ConfigMaps and Secrets (read-only for operators)
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+
+# Pods (monitor operator pods)
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+# Services (for operator discovery)
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+
+# Events (for logging)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-operator
+  labels:
+    app: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.rbac.name | default .Release.Name }}
+    namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-pods
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+rules:
+# Pods (read/write for application pods)
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+# Logs (for pod logs)
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-pods
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    release: {{ .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-pods
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.rbac.name | default .Release.Name }}
+    namespace: {{ .Release.Namespace }}
+
+{{- end }}

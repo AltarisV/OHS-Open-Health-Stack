@@ -1,0 +1,101 @@
+# openFHIR Helm Chart Values
+# This chart deploys openFHIR, a FHIR server with EHR-to-FHIR mapping
+
+replicaCount: 2
+
+image:
+  repository: openfhir/openfhir
+  tag: "2.2.1"  # PIN_VERSION: check https://hub.docker.com/r/openfhir/openfhir/tags
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  path: /openfhir
+  pathType: Prefix
+  hosts: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+# openFHIR-specific configuration
+config:
+  # FHIR versions to support
+  fhir:
+    versions:
+      - STU3
+      - R4
+      - R4B
+  
+  # MongoDB database configuration
+  database:
+    mongoUri: "mongodb://openfhir:CHANGE_ME_PASSWORD@mongodb-cluster.default.svc.cluster.local:27017/openfhir"
+  
+  # Integration with EHRbase
+  ehrbase:
+    enabled: true
+    baseUrl: http://ehrbase.default.svc.cluster.local:8080
+    username: ehrbase_user
+    password: CHANGE_ME_SECURE_PASSWORD  # Inject via Secret
+  
+  # Logging
+  logging:
+    level: INFO
+    format: json
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations:
+  prometheus.io/scrape: "false"
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

@@ -1,0 +1,281 @@
+# Open Health Stack - Master Helm Values
+# This file controls the deployment of all components in the OHS platform.
+# All external endpoints, credentials, and resource limits should be customized here.
+
+# Global configuration shared across all subcharts
+global:
+  domain: "example.org"  # CHANGE_ME: your actual domain
+  environment: "development"  # Options: development, staging, production
+  timezone: "UTC"
+  
+  # Shared image pull policy
+  imagePullPolicy: "IfNotPresent"  # Options: Always, IfNotPresent, Never
+  
+  # Pod security context (applied globally if not overridden)
+  podSecurityContext:
+    runAsNonRoot: false  # CHANGE_ME: enable for production
+    fsGroup: 1000
+
+# Database Operators
+cloudnative-pg:
+  enabled: true
+  version: "1.21.0"  # PIN_VERSION
+  cnpg:
+    crds:
+      create: true
+
+mongodb-operator:
+  enabled: true
+  version: "0.8.0"  # PIN_VERSION
+
+# PostgreSQL Clusters (for EHRbase and Eos)
+postgres:
+  enabled: true
+  # EHRbase database cluster
+  ehrbase:
+    enabled: true
+    storage: "10Gi"  # CHANGE_ME: adjust for your environment
+    instances: 3  # High-availability setup (production minimum)
+    walStorage: "5Gi"
+    backupRetention: "30d"
+    primaryUpdateStrategy: "unsupervised"  # Options: unsupervised, rollingUpdate
+  
+  # Eos (OMOP Bridge) database cluster - can share with EHRbase or be separate
+  eos:
+    enabled: true
+    sharedCluster: true  # true = use same cluster as EHRbase, false = create separate cluster
+    storage: "50Gi"  # CHANGE_ME: OMOP CDM requires more space; PIN_VERSION for production
+    instances: 2
+
+# MongoDB Clusters (for openFHIR)
+mongodb:
+  enabled: true
+  openfhir:
+    enabled: true
+    storage: "20Gi"  # CHANGE_ME
+    replicas: 3
+    rootPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: inject via Kubernetes Secret in production
+    persistence:
+      enabled: true
+
+# ========== CORE FOSS COMPONENTS ==========
+
+# EHRbase - EHR storage (published Docker image: ehrbase/ehrbase)
+ehrbase:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "ehrbase/ehrbase"
+    tag: "2.31.0"  # PIN_VERSION: check https://hub.docker.com/r/ehrbase/ehrbase/tags for latest
+    pullPolicy: "IfNotPresent"
+  
+  service:
+    type: "ClusterIP"
+    port: 8080
+    targetPort: 8080
+  
+  ingress:
+    enabled: true
+    path: "/ehrbase"
+    pathType: "Prefix"
+  
+  resources:
+    requests:
+      cpu: "CHANGE_ME"  # e.g., "500m"
+      memory: "CHANGE_ME"  # e.g., "1Gi"
+    limits:
+      cpu: "CHANGE_ME"  # e.g., "2000m"
+      memory: "CHANGE_ME"  # e.g., "4Gi"
+  
+  # Security: basic auth credentials (inject via Secret in production)
+  auth:
+    enabled: true
+    username: "ehrbase_user"  # CHANGE_ME
+    password: "CHANGE_ME_SECURE_PASSWORD"
+    type: "BASIC"  # Options: BASIC, OAUTH2
+  
+  # Database connection (uses PostgreSQL cluster created above)
+  database:
+    host: "postgres-cluster.default.svc.cluster.local"  # CHANGE_ME: update namespace if different
+    port: 5432
+    name: "ehrbase"
+    username: "ehrbase"
+    password: "CHANGE_ME_DATABASE_PASSWORD"  # Inject via Secret
+  
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: "/health"
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  
+  readinessProbe:
+    httpGet:
+      path: "/health"
+      port: 8080
+    initialDelaySeconds: 20
+    periodSeconds: 5
+
+# openFHIR - FHIR server & EHR-FHIR mapping (published Docker image: openfhir/openfhir)
+openfhir:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "openfhir/openfhir"
+    tag: "2.2.1"  # PIN_VERSION: check Docker Hub for latest
+    pullPolicy: "IfNotPresent"
+  
+  service:
+    type: "ClusterIP"
+    port: 8080
+    targetPort: 8080
+  
+  ingress:
+    enabled: true
+    path: "/openfhir"
+    pathType: "Prefix"
+  
+  resources:
+    requests:
+      cpu: "CHANGE_ME"
+      memory: "CHANGE_ME"
+    limits:
+      cpu: "CHANGE_ME"
+      memory: "CHANGE_ME"
+  
+  # FHIR server configuration
+  fhir:
+    versions: ["STU3", "R4", "R4B"]  # Supported FHIR versions
+  
+  # Database connection (uses MongoDB cluster created above)
+  database:
+    mongoUri: "mongodb://openfhir:CHANGE_ME_PASSWORD@mongodb-cluster.default.svc.cluster.local:27017/openfhir"  # CHANGE_ME: inject via Secret
+  
+  # EHRbase integration (for bidirectional sync)
+  ehrbaseIntegration:
+    enabled: true
+    baseUrl: "http://ehrbase.default.svc.cluster.local:8080"  # CHANGE_ME: update namespace
+    username: "ehrbase_user"
+    password: "CHANGE_ME_SECURE_PASSWORD"
+  
+  livenessProbe:
+    httpGet:
+      path: "/health"
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+# Eos - OMOP Bridge (published Docker image: ghcr.io/sevkohler/eos)
+# Image is only tagged as 'latest' in the upstream registry; pin by digest for production.
+# Workflow: https://github.com/SevKohler/Eos/blob/main/.github/workflows/docker-image.yml
+eos:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "ghcr.io/sevkohler/eos"
+    tag: "latest"  # upstream only publishes 'latest'; pin to a digest for production
+    pullPolicy: "IfNotPresent"
+  
+  service:
+    type: "ClusterIP"
+    port: 8080
+    targetPort: 8080
+  
+  ingress:
+    enabled: true
+    path: "/eos"
+    pathType: "Prefix"
+  
+  resources:
+    requests:
+      cpu: "CHANGE_ME"
+      memory: "CHANGE_ME"
+    limits:
+      cpu: "CHANGE_ME"
+      memory: "CHANGE_ME"
+  
+  # Database connection (uses PostgreSQL cluster, separate schema/database from EHRbase)
+  database:
+    host: "postgres-cluster.default.svc.cluster.local"
+    port: 5432
+    name: "eos_omop"  # OMOP CDM schema here
+    username: "eos"
+    password: "CHANGE_ME_DATABASE_PASSWORD"
+  
+  # EHRbase integration
+  ehrbase:
+    baseUrl: "http://ehrbase.default.svc.cluster.local:8080"
+    username: "ehrbase_user"
+    password: "CHANGE_ME_SECURE_PASSWORD"
+  
+  # OMOP vocabularies and mapping files
+  omop:
+    athenaVocabulariesPresent: false  # CHANGE_ME: must be true for production; vocabularies should be pre-loaded in database
+    mappingFiles: "CHANGE_ME_REFERENCE_MAPPINGS"
+  
+  livenessProbe:
+    httpGet:
+      path: "/health"
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+# ========== NETWORKING & INGRESS ==========
+
+ingress:
+  enabled: true
+  className: "nginx"  # CHANGE_ME: your ingress controller class (e.g., "traefik", "gce")
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # CHANGE_ME: if using cert-manager
+  
+  tls:
+    enabled: true
+    issuer: "letsencrypt-prod"  # CHANGE_ME: let's encrypt issuer name, or "self-signed" for dev
+  
+  hosts:
+    - host: "ohs.example.org"  # CHANGE_ME: your actual domain
+      paths:
+        - path: "/ehrbase"
+          pathType: "Prefix"
+          service: "ehrbase"
+        - path: "/openfhir"
+          pathType: "Prefix"
+          service: "openfhir"
+        - path: "/eos"
+          pathType: "Prefix"
+          service: "eos"
+
+# ========== MONITORING & LOGGING (OPTIONAL) ==========
+
+monitoring:
+  enabled: false  # Disable by default; enable if Prometheus is running in cluster
+  prometheus:
+    servicemonitor:
+      enabled: false  # Creates ServiceMonitor CRD for Prometheus Operator
+      interval: 30s
+      scrapeTimeout: 10s
+
+logging:
+  enabled: false  # Disable by default
+  # For integration with ELK, Loki, etc., configure here
+
+# ========== NETWORK POLICY & MICROSEGMENTATION ==========
+
+networkPolicy:
+  enabled: true  # Enable NetworkPolicy for production
+  policyTypes:
+    - Ingress
+
+# ========== SECURITY & RBAC ==========
+
+rbac:
+  create: true  # Create ServiceAccount, ClusterRole, ClusterRoleBinding
+  name: "ohs"
+
+# ========== NAMESPACE ==========
+
+namespace:
+  name: "default"  # CHANGE_ME: create and use a dedicated namespace in production
+  create: false  # Set to true if you want Helm to create the namespace
+

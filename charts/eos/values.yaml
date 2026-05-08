@@ -1,0 +1,110 @@
+# Eos Helm Chart Values
+# This chart deploys Eos, the OMOP Bridge ETL tool
+
+replicaCount: 1  # Eos typically runs as a single instance (batch jobs)
+
+image:
+  repository: ghcr.io/sevkohler/eos
+  tag: "latest"  # upstream only publishes 'latest'; pin to a digest for production
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  path: /eos
+  pathType: Prefix
+  hosts: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# Eos-specific configuration
+config:
+  # PostgreSQL database configuration
+  database:
+    host: postgres-cluster.default.svc.cluster.local
+    port: 5432
+    name: eos_omop  # OMOP CDM schema
+    username: eos
+    password: CHANGE_ME_DATABASE_PASSWORD  # Inject via Secret
+  
+  # EHRbase integration
+  ehrbase:
+    enabled: true
+    baseUrl: http://ehrbase.default.svc.cluster.local:8080
+    username: ehrbase_user
+    password: CHANGE_ME_SECURE_PASSWORD  # Inject via Secret
+  
+  # OMOP configuration
+  omop:
+    # ATHENA vocabularies must be pre-loaded into database
+    athenaVocabulariesPresent: false  # CHANGE_ME to true when vocabularies are loaded
+    # Concept mapping files location
+    mappingFilesPath: /app/mappings  # ConfigMap mounted path
+  
+  # Java/JVM configuration
+  jvm:
+    maxHeapSize: "2g"
+    minHeapSize: "512m"
+  
+  # Logging
+  logging:
+    level: INFO
+    format: json
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations:
+  prometheus.io/scrape: "false"
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

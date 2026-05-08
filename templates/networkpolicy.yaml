@@ -1,0 +1,78 @@
+{{- if .Values.networkPolicy }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# Deny all ingress by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+---
+# Allow ingress from ingress controller to OHS services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx  # Adjust for your Ingress controller namespace
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# Allow pod-to-pod communication within OHS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-internal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: {{ .Release.Name }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ .Release.Name }}
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432   # PostgreSQL
+    - protocol: TCP
+      port: 27017  # MongoDB
+    - protocol: TCP
+      port: 8080   # HTTP services
+
+{{- end }}
+{{- end }}

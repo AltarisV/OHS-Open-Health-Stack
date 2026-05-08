@@ -1,0 +1,38 @@
+# MongoDB Community Operator Configuration
+# This subchart configures the MongoDB Kubernetes Operator for OHS.
+
+# Operator settings
+operator:
+  enabled: true
+  
+  # Operator image
+  image:
+    repository: "quay.io/mongodb/mongodb-kubernetes-operator"
+    tag: "0.8.0"  # PIN_VERSION: match operator version
+    pullPolicy: "IfNotPresent"
+  
+  # Operator pod settings
+  replicas: 1
+  
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# RBAC configuration
+rbac:
+  create: true  # MongoDB operator requires RBAC
+
+# CRD (Custom Resource Definition) installation
+crds:
+  create: true  # Install MongoDB CRDs
+
+# Monitoring (Prometheus)
+monitoring:
+  enabled: false  # Enable if Prometheus is running
+  serviceMonitor:
+    enabled: false
+

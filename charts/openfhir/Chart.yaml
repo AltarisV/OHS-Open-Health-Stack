@@ -1,0 +1,12 @@
+apiVersion: v2
+name: openfhir
+description: openFHIR - FHIR server with EHR-to-FHIR mapping bridge
+type: application
+version: 0.1.0
+appVersion: "2.2.1"
+home: https://github.com/openfhir/openfhir
+sources:
+  - https://github.com/openfhir/openfhir
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org
