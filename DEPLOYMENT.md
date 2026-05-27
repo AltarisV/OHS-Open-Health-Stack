@@ -153,48 +153,29 @@ eos:
 
 ### Step 5: Create Kubernetes Secrets for Passwords
 
-**Instead of committing secrets**, create them in the cluster:
+**Recommended (local dev):** copy `.env.example` to `.env`, fill in your values, then run the bootstrap script:
 
 ```bash
-# Create a secret for EHRbase credentials
-kubectl create secret generic ohs-credentials \
-  --from-literal=ehrbase-user-password=your_secure_password \
-  --from-literal=ehrbase-db-password=your_db_password \
-  --from-literal=mongodb-password=your_mongodb_password \
-  --from-literal=eos-db-password=your_eos_password \
-  -n ohs
-
-# Verify the secret was created
-kubectl get secret ohs-credentials -n ohs -o jsonpath='{.data}' | base64 -d
+cp .env.example .env
+# edit .env with your passwords
+bash create-secret.sh          # Linux/macOS
+# .\create-secret.ps1          # Windows PowerShell
 ```
 
-**Alternatively**, use a secrets management tool:
+The script reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is committed as the template.
 
-**Option A: Sealed Secrets**
+**Manual equivalent:**
+
 ```bash
-# Install sealed-secrets controller
-helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
-helm install sealed-secrets sealed-secrets/sealed-secrets -n kube-system
-
-# Encrypt your credentials
-echo -n 'your_password' | kubectl create secret generic ohs-creds \
-  --dry-run=client --from-file=password=/dev/stdin -o yaml \
-  | kubeseal -f - > ohs-creds-sealed.yaml
-
-# Commit sealed secret to Git (cannot be decrypted without cluster key)
-git add ohs-creds-sealed.yaml
+kubectl create secret generic ohs-credentials -n ohs \
+  --from-literal=ehrbase-user-password=YOUR_PASSWORD \
+  --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
+  --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
+  --from-literal=redis-password=YOUR_REDIS_PASSWORD \
+  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir'
 ```
 
-**Option B: External Secrets Operator**
-```bash
-# Install external-secrets controller
-helm repo add external-secrets https://charts.external-secrets.io
-helm install external-secrets external-secrets/external-secrets \
-  -n external-secrets-system --create-namespace
-
-# Configure to pull from HashiCorp Vault, AWS Secrets Manager, etc.
-# (See ExternalSecret CRD documentation)
-```
+> **Note:** The password in `openfhir-mongo-uri` must match the password provisioned in the MongoDB cluster. For staging/production, replace this with Sealed Secrets or External Secrets Operator — see [SECRETS.md](SECRETS.md).
 
 ### Step 6: Validate Helm Chart
 
