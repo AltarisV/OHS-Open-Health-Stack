@@ -158,8 +158,7 @@ eos:
 ```bash
 cp .env.example .env
 # edit .env with your passwords
-bash create-secret.sh          # Linux/macOS
-# .\create-secret.ps1          # Windows PowerShell
+bash create-secret.sh
 ```
 
 The script reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is committed as the template.

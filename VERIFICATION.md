@@ -41,20 +41,20 @@ kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
 kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
 ```
 
-Quick health checks (PowerShell):
+Quick health checks:
 
-```powershell
-$auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("ehrbase_user:YOUR_PASSWORD"))
+```bash
+AUTH=$(echo -n "ehrbase_user:YOUR_PASSWORD" | base64)
 
 # EHRbase — list templates (empty array is expected on fresh install)
-Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4" `
-  -Headers @{Authorization=$auth}
+curl -s -H "Authorization: Basic $AUTH" \
+  http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4
 
 # openFHIR — list operational templates (empty array expected on fresh install)
-Invoke-RestMethod "http://localhost:8081/opt"  # or open http://localhost:8081/ for Swagger UI
+curl -s http://localhost:8081/opt  # or open http://localhost:8081/ for Swagger UI
 
 # Eos — responds 405 (POST-only) confirming the endpoint exists
-Invoke-WebRequest "http://localhost:8082/person" -Method GET  # expect: 405 Method Not Allowed
+curl -o /dev/null -w "%{http_code}\n" http://localhost:8082/person  # expect: 405
 ```
 
 ---
@@ -70,12 +70,11 @@ Hibernate auto-creates entity-mapped OMOP tables on Eos startup, but vocabulary 
 2. Download the OMOP CDM v5.4 DDL from the [OHDSI CommonDataModel repo](https://github.com/OHDSI/CommonDataModel/tree/main/inst/ddl/5.4/postgresql).
 3. Forward the PostgreSQL port and load:
 
-```powershell
-kubectl port-forward svc/postgres-cluster-rw 5432:5432 -n ohs
+```bash
+kubectl port-forward svc/postgres-cluster-rw 5432:5432 -n ohs &
 
-$env:PGPASSWORD = kubectl get secret postgres-eos-user-secret -n ohs `
-  -o jsonpath="{.data.password}" |
-  ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) }
+export PGPASSWORD=$(kubectl get secret postgres-eos-user-secret -n ohs \
+  -o jsonpath="{.data.password}" | base64 -d)
 
 psql -h localhost -p 5432 -U eos -d eos_omop -f OMOP_CDM_postgresql_5.4_ddl.sql
 psql -h localhost -p 5432 -U eos -d eos_omop -f OMOP_CDM_vocabulary_load.sql  # edit CSV paths first
@@ -85,32 +84,42 @@ psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM concept;"
 
 ### EHRbase — create EHR and upload template
 
-```powershell
-$auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("ehrbase_user:YOUR_PASSWORD"))
-$headers = @{Authorization=$auth; "Content-Type"="application/json"; Prefer="return=representation"}
+```bash
+AUTH=$(echo -n "ehrbase_user:YOUR_PASSWORD" | base64)
 
 # Create an EHR
-$body = '{"_type":"EHR_STATUS","archetype_node_id":"openEHR-EHR-EHR_STATUS.generic.v1","name":{"_type":"DV_TEXT","value":"EHR Status"},"subject":{"external_ref":{"id":{"_type":"GENERIC_ID","value":"patient-001","scheme":"test"},"namespace":"test","type":"PERSON"}},"is_modifiable":true,"is_queryable":true}'
-$ehr = Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/ehr" -Method POST -Headers $headers -Body $body
-$ehrId = $ehr.ehr_id.value
+EHR=$(curl -s -X POST \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{"_type":"EHR_STATUS","archetype_node_id":"openEHR-EHR-EHR_STATUS.generic.v1","name":{"_type":"DV_TEXT","value":"EHR Status"},"subject":{"external_ref":{"id":{"_type":"GENERIC_ID","value":"patient-001","scheme":"test"},"namespace":"test","type":"PERSON"}},"is_modifiable":true,"is_queryable":true}' \
+  http://localhost:8080/ehrbase/rest/openehr/v1/ehr)
+EHR_ID=$(echo "$EHR" | jq -r '.ehr_id.value')
 
 # Upload an openEHR template (OPT file)
-# Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4" `
-#   -Method POST -Headers @{Authorization=$auth; "Content-Type"="application/xml"} -InFile "template.opt"
+# curl -s -X POST \
+#   -H "Authorization: Basic $AUTH" \
+#   -H "Content-Type: application/xml" \
+#   --data-binary @template.opt \
+#   http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4
 
 # Submit a composition (requires template uploaded first)
-# Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$ehrId/composition" `
-#   -Method POST -Headers $headers -Body $compositionJson
+# curl -s -X POST \
+#   -H "Authorization: Basic $AUTH" \
+#   -H "Content-Type: application/json" \
+#   -H "Prefer: return=representation" \
+#   -d "$COMPOSITION_JSON" \
+#   http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$EHR_ID/composition
 ```
 
 ### Eos — convert EHRs to OMOP
 
-```powershell
+```bash
 # Convert all EHRs to OMOP PERSON records
-Invoke-RestMethod "http://localhost:8082/person" -Method POST -ContentType "application/json" -Body "{}"
+curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/person
 
 # Convert all compositions to OMOP CDM records
-Invoke-RestMethod "http://localhost:8082/ehr" -Method POST -ContentType "application/json" -Body "{}"
+curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/ehr
 
 # Verify
 psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM person;"
@@ -119,9 +128,9 @@ psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM measuremen
 
 ### openFHIR — FHIR queries
 
-```powershell
-Invoke-RestMethod "http://localhost:8081/fhir/Patient"
-Invoke-RestMethod "http://localhost:8081/fhir/Patient?identifier=$ehrId"
+```bash
+curl -s http://localhost:8081/fhir/Patient
+curl -s "http://localhost:8081/fhir/Patient?identifier=$EHR_ID"
 ```
 
 ---

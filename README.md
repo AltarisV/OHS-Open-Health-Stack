@@ -24,7 +24,7 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide including operat
 ```bash
 kubectl create namespace ohs && kubectl label namespace ohs name=ohs
 cp .env.example .env        # fill in your passwords
-bash create-secret.sh       # Windows: .\create-secret.ps1
+bash create-secret.sh
 helm install ohs . -f values.yaml -n ohs
 kubectl get pods -n ohs -w
 ```
@@ -65,7 +65,7 @@ ohs/
 ## Key Notes
 
 - **Operators must be pre-installed** (CloudNativePG, MongoDB Community) — see [DEPLOYMENT.md](DEPLOYMENT.md)
-- **`ohs-credentials` secret** — copy `.env.example` → `.env`, fill in passwords, run `create-secret.sh` / `create-secret.ps1`
+- **`ohs-credentials` secret** — copy `.env.example` → `.env`, fill in passwords, run `create-secret.sh`
 - **Eos runs on port 8081** (not 8080) — probes and service targetPort are configured accordingly
 - **`helm upgrade` recreates the PostgreSQL cluster** (hook policy `before-hook-creation`) — all DB data is wiped; change this before production use
 - **openEHRTool-v2** has no published Docker image; build it from source in `packaging/openEHRTool-v2/`
