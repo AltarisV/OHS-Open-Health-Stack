@@ -36,38 +36,32 @@ spec:
           protocol: TCP
         
         env:
-        # Database configuration
-        - name: DB_URL
+        # Database configuration (Spring Boot relaxed binding)
+        - name: SPRING_DATASOURCE_URL
           value: "jdbc:postgresql://{{ .Values.config.database.host }}:{{ .Values.config.database.port }}/{{ .Values.config.database.name }}"
-        - name: DB_USER
+        - name: SPRING_DATASOURCE_USERNAME
           value: {{ .Values.config.database.username | quote }}
-        - name: DB_PASSWORD
+        - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: ohs-credentials
-              key: eos-db-password
+              name: postgres-eos-user-secret
+              key: password
         
-        # EHRbase configuration
-        - name: EHRBASE_ENABLED
-          value: "{{ .Values.config.ehrbase.enabled }}"
-        - name: EHRBASE_URL
+        # EHRbase / openEHR configuration
+        - name: OPENEHR_BASE_URL
           value: {{ .Values.config.ehrbase.baseUrl | quote }}
-        - name: EHRBASE_USER
+        - name: OPENEHR_SECURITY_TYPE
+          value: "basic"
+        - name: OPENEHR_SECURITY_USER_NAME
           value: {{ .Values.config.ehrbase.username | quote }}
-        - name: EHRBASE_PASSWORD
+        - name: OPENEHR_SECURITY_USER_PASSWORD
           valueFrom:
             secretKeyRef:
               name: ohs-credentials
               key: ehrbase-user-password
         
-        # OMOP configuration
-        - name: ATHENA_VOCABULARIES_PRESENT
-          value: "{{ .Values.config.omop.athenaVocabulariesPresent }}"
-        - name: MAPPING_FILES_PATH
-          value: {{ .Values.config.omop.mappingFilesPath | quote }}
-        
         # Java/JVM configuration
-        - name: JAVA_OPTS
+        - name: JAVA_TOOL_OPTIONS
           value: "-Xmx{{ .Values.config.jvm.maxHeapSize }} -Xms{{ .Values.config.jvm.minHeapSize }}"
         
         # Logging
@@ -82,12 +76,12 @@ spec:
         
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
-          {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
         {{- end }}
         
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
-          {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
         {{- end }}
         
         resources:

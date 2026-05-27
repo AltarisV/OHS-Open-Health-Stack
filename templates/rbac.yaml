@@ -103,3 +103,41 @@ subjects:
     namespace: {{ .Release.Namespace }}
 
 {{- end }}
+
+{{- if .Values.mongodb.enabled }}
+---
+# MongoDB Community Operator requires this ServiceAccount + Role in every
+# namespace where it deploys a MongoDB cluster.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-database
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mongodb-database
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["patch", "delete", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mongodb-database
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mongodb-database
+subjects:
+- kind: ServiceAccount
+  name: mongodb-database
+  namespace: {{ .Release.Namespace }}
+{{- end }}

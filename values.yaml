@@ -45,7 +45,15 @@ postgres:
     enabled: true
     sharedCluster: true  # true = use same cluster as EHRbase, false = create separate cluster
     storage: "50Gi"  # CHANGE_ME: OMOP CDM requires more space; PIN_VERSION for production
+    walStorage: "5Gi"
     instances: 2
+    userPassword: ""  # CHANGE_ME: password for the eos PostgreSQL role
+
+  # Backup (disabled by default; configure destinationPath for production)
+  backup:
+    enabled: false
+    destinationPath: ""  # e.g. s3://my-bucket/postgres-backups
+    retentionDays: 30
 
 # MongoDB Clusters (for openFHIR)
 mongodb:
@@ -55,6 +63,7 @@ mongodb:
     storage: "20Gi"  # CHANGE_ME
     replicas: 3
     rootPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: inject via Kubernetes Secret in production
+    userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the openfhir MongoDB user
     persistence:
       enabled: true
 

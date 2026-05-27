@@ -40,6 +40,7 @@ spec:
   users:
     - name: root
       db: admin
+      scramCredentialsSecretName: mongodb-root-scram-credentials
       passwordSecretRef:
         name: mongodb-root-password
       roles:
@@ -48,43 +49,21 @@ spec:
     
     - name: openfhir
       db: openfhir
+      scramCredentialsSecretName: mongodb-openfhir-scram-credentials
       passwordSecretRef:
         name: mongodb-openfhir-password
       roles:
         - name: readWrite
           db: openfhir
   
-  # Persistent storage
+  # StatefulSet overrides (only resources and storage — let the operator manage
+  # selectors, labels, serviceName, and replicas automatically)
   statefulSet:
     spec:
-      selector: {}
-      serviceName: mongodb-cluster-svc
-      replicas: {{ .Values.mongodb.openfhir.replicas | default 3 }}
       template:
-        metadata:
-          labels:
-            app: mongodb
-            release: {{ .Release.Name }}
         spec:
-          affinity:
-            podAntiAffinity:
-              preferredDuringSchedulingIgnoredDuringExecution:
-                - weight: 100
-                  podAffinityTerm:
-                    labelSelector:
-                      matchExpressions:
-                        - key: app
-                          operator: In
-                          values:
-                            - mongodb
-                    topologyKey: kubernetes.io/hostname
-          
-          terminationGracePeriodSeconds: 10
-          
           containers:
             - name: mongod
-              image: "mongo:6.0.6-alpine"  # PIN_VERSION
-              
               resources:
                 requests:
                   cpu: "100m"
@@ -92,35 +71,6 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: "1Gi"
-              
-              ports:
-                - containerPort: 27017
-              
-              livenessProbe:
-                exec:
-                  command:
-                    - /bin/sh
-                    - -c
-                    - mongo --eval "db.adminCommand('ping')"
-                initialDelaySeconds: 30
-                periodSeconds: 10
-                timeoutSeconds: 5
-                failureThreshold: 3
-              
-              readinessProbe:
-                exec:
-                  command:
-                    - /bin/sh
-                    - -c
-                    - mongo --eval "db.adminCommand('ping')"
-                initialDelaySeconds: 10
-                periodSeconds: 5
-                timeoutSeconds: 3
-                failureThreshold: 3
-              
-              volumeMounts:
-                - name: data-volume
-                  mountPath: /data/db
       
       volumeClaimTemplates:
         - metadata:
@@ -128,7 +78,6 @@ spec:
           spec:
             accessModes:
               - ReadWriteOnce
-            storageClassName: ""  # Uses default storage class
             resources:
               requests:
                 storage: {{ .Values.mongodb.openfhir.storage | default "20Gi" }}
@@ -165,6 +114,6 @@ metadata:
     release: {{ .Release.Name }}
 type: Opaque
 stringData:
-  password: {{ .Values.mongodb.openfhir.rootPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
+  password: {{ .Values.mongodb.openfhir.userPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
 
 {{- end }}

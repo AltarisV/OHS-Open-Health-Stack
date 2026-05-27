@@ -621,6 +621,80 @@ kubectl delete namespace ohs
 
 ---
 
+## Production Deployment Notes
+
+These notes were discovered during real deployment and address issues not covered above.
+
+### Operator Pre-Installation (Required)
+
+The chart does **not** install the CloudNativePG or MongoDB Community operators itself. They must be installed cluster-wide before deploying OHS:
+
+```bash
+# CloudNativePG operator
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm install cnpg-system cnpg/cloudnative-pg --namespace cnpg-system --create-namespace
+
+# MongoDB Community Operator
+# watchNamespace=* allows the operator to watch all namespaces.
+# For production, set watchNamespace to your target namespace.
+helm repo add mongodb https://mongodb.github.io/helm-charts
+helm install mongodb-operator mongodb/community-operator \
+  --namespace mongodb-operator --create-namespace \
+  --set operator.watchNamespace=ohs
+```
+
+### `ohs-credentials` Secret (Required Before Install)
+
+This secret must be created manually before `helm install`. The chart references it but does not create it:
+
+```bash
+kubectl create secret generic ohs-credentials --namespace ohs \
+  --from-literal=ehrbase-user-password=YOUR_SECURE_PASSWORD \
+  --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
+  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_USER_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir' \
+  --from-literal=eos-db-password=YOUR_EOS_DB_PASSWORD \
+  --from-literal=redis-password=YOUR_REDIS_PASSWORD
+```
+
+The MongoDB URI password in `openfhir-mongo-uri` **must exactly match** `mongodb.openfhir.userPassword` in your values file, otherwise openFHIR will fail SCRAM authentication at startup.
+
+### Critical: PostgreSQL Cluster Recreated on Every Upgrade
+
+The `postgres-cluster.yaml` Helm hook uses `helm.sh/hook-delete-policy: before-hook-creation`, which **deletes and recreates the entire PostgreSQL cluster on every `helm upgrade`**, wiping all data.
+
+- **For production**: Remove the `helm.sh/hook` annotations from `templates/databases/postgres-cluster.yaml` and manage the `Cluster` resource lifecycle independently from the Helm release. Apply database schema changes manually.
+- **For development**: This behaviour is acceptable but be aware that EHRbase will re-run all Flyway migrations and all stored data is lost on every upgrade.
+
+### Service Ports Reference
+
+| Service | Container Port | Service Port |
+|---------|---------------|-------------|
+| EHRbase | 8080 | 8080 |
+| openFHIR | 8080 | 8080 |
+| Eos | **8081** | **8081** |
+| PostgreSQL (CNPG -rw) | 5432 | 5432 |
+| MongoDB | 27017 | 27017 |
+
+> **Note**: Eos runs on port 8081 (configured via `server.port: 8081` in its `application.yml`), not 8080. Liveness/readiness probes and the service `targetPort` must use 8081.
+
+### CNPG Service Name
+
+CloudNativePG creates the read-write service as `<cluster-name>-rw`, not `<cluster-name>`. Use `postgres-cluster-rw.ohs.svc.cluster.local` as the database hostname in all application configs.
+
+### Eos OMOP CDM Setup
+
+Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (`ddl-auto: update`) automatically creates entity-mapped tables. However, the OMOP **vocabulary tables** (CONCEPT, VOCABULARY, DOMAIN, etc.) are not created automatically and must be populated from [Athena](https://athena.ohdsi.org/) before mappings will function correctly. See VERIFICATION.md for the loading procedure.
+
+### MongoDB Image
+
+MongoDB Alpine variants (`mongo:x.y.z-alpine`) were discontinued after version 4.4. The MongoDB Community Operator uses `docker.io/mongodb/mongodb-community-server:<version>-ubi8` automatically when no custom image is specified — do not override the image in `statefulSet.spec.template.spec.containers`.
+
+### MongoDB Operator StatefulSet Caution
+
+Do not override `selector.matchLabels`, pod template `metadata.labels`, or `serviceName` inside `statefulSet.spec` in `mongodb-cluster.yaml`. The operator assigns these itself; custom values break the operator-managed service-to-pod selector and the pod will not be discovered.
+
+---
+
 **Last Updated**: May 2026  
 **Version**: 0.1.0
 

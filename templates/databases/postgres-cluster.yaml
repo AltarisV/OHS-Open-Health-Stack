@@ -1,5 +1,22 @@
 {{- if .Values.postgres.enabled }}
 ---
+# Secret for eos PostgreSQL role (used by CNPG managed roles)
+{{- if .Values.postgres.ehrbase.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-eos-user-secret
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+type: kubernetes.io/basic-auth
+stringData:
+  username: eos
+  password: {{ .Values.postgres.eos.userPassword | default "eos" | quote }}
+{{- end }}
+---
 # PostgreSQL Cluster for EHRbase
 {{- if .Values.postgres.ehrbase.enabled }}
 apiVersion: postgresql.cnpg.io/v1
@@ -24,7 +41,7 @@ spec:
   primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
   
   # PostgreSQL version and image
-  imageName: "ghcr.io/cloudnative-pg/postgresql:15-alpine"  # PIN_VERSION
+  # imageName is omitted; CNPG uses its operator-bundled default image
   postgresql:
     parameters:
       max_connections: "200"
@@ -37,58 +54,60 @@ spec:
       random_page_cost: "1.1"
       effective_io_concurrency: "200"
       work_mem: "1280kB"
-      min_wal_size: "2GB"
-      max_wal_size: "8GB"
+      # min_wal_size and max_wal_size intentionally omitted;
+      # defaults (80MB/1GB) work for any WAL volume size.
   
   # Bootstrap configuration (initial database setup)
   bootstrap:
     initdb:
       database: "ehrbase"
       owner: "ehrbase"
+      postInitSQL:
+        # Cluster-level operations (run in postgres db as superuser)
+        # Create eos role and eos_omop database (separate DB for Eos OMOP bridge)
+        - "CREATE ROLE eos WITH LOGIN;"
+        - "CREATE DATABASE eos_omop OWNER eos;"
+        - "GRANT ALL PRIVILEGES ON DATABASE eos_omop TO eos;"
       postInitApplicationSQL:
-        # Create initial schemas and roles
+        # ehrbase database setup (run in ehrbase db as superuser)
+        - "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
         - "CREATE SCHEMA IF NOT EXISTS ehrbase;"
-        - "CREATE SCHEMA IF NOT EXISTS eos_omop;"
         - "GRANT USAGE ON SCHEMA ehrbase TO ehrbase;"
-        - "GRANT USAGE ON SCHEMA eos_omop TO eos;"
         - "ALTER DEFAULT PRIVILEGES IN SCHEMA ehrbase GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ehrbase;"
-        - "ALTER DEFAULT PRIVILEGES IN SCHEMA eos_omop GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eos;"
   
   # Storage configuration
   storage:
     size: {{ .Values.postgres.ehrbase.storage | default "10Gi" }}
-    storageClass: ""  # Uses default storage class; change if needed
   
   # WAL (Write-Ahead Log) storage
   walStorage:
     size: {{ .Values.postgres.ehrbase.walStorage | default "5Gi" }}
-    storageClass: ""
   
-  # Backup configuration
+  {{- if .Values.postgres.backup.enabled }}
+  # Backup configuration (set postgres.backup.enabled=true and configure destinationPath)
   backup:
     barmanObjectStore:
-      # For MVP, backups can use a local PVC or S3 bucket
-      # This is a placeholder; configure S3 for production
+      destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
       wal:
         compression: gzip
         maxParallel: 4
       data:
         compression: gzip
-      recoveryWindowInDays: {{ 30 }}  # Retention policy (30 days)
-      # s3Credentials:
-      #   secretKeyRef:
-      #     name: backup-s3-creds
-      #     key: accessKeyId
-      # s3Credentials:
-      #   secretKeyRef:
-      #     name: backup-s3-creds
-      #     key: secretAccessKey
-      # Placeholder: use local backup for development
+      recoveryWindowInDays: {{ .Values.postgres.backup.retentionDays | default 30 }}
+  {{- end }}
   
   # Monitoring and observability
   monitoring:
-    enabled: {{ .Values.monitoring.enabled | default false }}
-    pgpassFile: ""
+    enablePodMonitor: {{ .Values.monitoring.enabled | default false }}
+  
+  # Managed roles (CNPG sets PostgreSQL role passwords from secrets)
+  managed:
+    roles:
+      - name: eos
+        ensure: present
+        login: true
+        passwordSecret:
+          name: postgres-eos-user-secret
   
   # Resource requests and limits
   resources:
@@ -118,7 +137,7 @@ spec:
   instances: {{ .Values.postgres.eos.instances | default 2 }}
   primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
   
-  imageName: "ghcr.io/cloudnative-pg/postgresql:15-alpine"
+  imageName: "ghcr.io/cloudnative-pg/postgresql:15"
   postgresql:
     parameters:
       max_connections: "300"
@@ -139,18 +158,21 @@ spec:
     size: {{ .Values.postgres.eos.storage | default "50Gi" }}
   
   walStorage:
-    size: {{ .Values.postgres.eos.storage | default "50Gi" | divideAmount 10 }}
-  
+    size: {{ .Values.postgres.eos.walStorage | default "5Gi" }}
+
+  {{- if .Values.postgres.backup.enabled }}
   backup:
     barmanObjectStore:
+      destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
       wal:
         compression: gzip
       data:
         compression: gzip
-      recoveryWindowInDays: 30
+      recoveryWindowInDays: {{ .Values.postgres.backup.retentionDays | default 30 }}
+  {{- end }}
   
   monitoring:
-    enabled: {{ .Values.monitoring.enabled | default false }}
+    enablePodMonitor: {{ .Values.monitoring.enabled | default false }}
   
   resources:
     requests:

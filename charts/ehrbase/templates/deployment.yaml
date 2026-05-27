@@ -50,13 +50,26 @@ spec:
         # Database configuration
         - name: DB_URL
           value: "jdbc:postgresql://{{ .Values.config.database.host }}:{{ .Values.config.database.port }}/{{ .Values.config.database.name }}"
-        - name: DB_USER
-          value: {{ .Values.config.database.username | quote }}
-        - name: DB_PASSWORD
+        - name: DB_USER_ADMIN
           valueFrom:
             secretKeyRef:
-              name: ohs-credentials
-              key: ehrbase-db-password
+              name: postgres-cluster-app
+              key: username
+        - name: DB_PASS_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: postgres-cluster-app
+              key: password
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-cluster-app
+              key: username
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: postgres-cluster-app
+              key: password
         
         # Java/JVM configuration
         - name: JAVA_OPTS
@@ -68,12 +81,12 @@ spec:
         
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
-          {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
         {{- end }}
         
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
-          {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
         {{- end }}
         
         resources:
