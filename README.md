@@ -21,12 +21,25 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 
 See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide including operator pre-installation.
 
+You can deploy in either mode:
+
+- Standard Kubernetes cluster (recommended default for shared/home clusters)
+- Optional local Minikube profile for smaller testing
+
 ```bash
 kubectl create namespace ohs && kubectl label namespace ohs name=ohs
 cp .env.example .env        # fill in your passwords
 bash create-secret.sh
 helm install ohs . -f values.yaml -n ohs
 kubectl get pods -n ohs -w
+```
+
+Optional Minikube local start:
+
+```bash
+minikube start --driver=docker
+helm install ohs . -f values.yaml -f values-minikube.yaml -n ohs \
+    --set-string mongodb.openfhir.userPassword="$OPENFHIR_MONGO_PASSWORD"
 ```
 
 ## Documentation

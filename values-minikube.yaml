@@ -1,0 +1,61 @@
+# Local Linux Mint + Minikube overrides for OHS
+# Use with: helm upgrade --install ohs . -n ohs -f values.yaml -f values-minikube.yaml
+
+ingress:
+  enabled: false
+
+ehrbase:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    database:
+      host: "postgres-cluster-rw.ohs.svc.cluster.local"
+
+openfhir:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    ehrbase:
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"
+
+eos:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "3Gi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    database:
+      host: "postgres-cluster-rw.ohs.svc.cluster.local"
+    ehrbase:
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"
+    jvm:
+      maxHeapSize: "1g"
+      minHeapSize: "256m"

@@ -75,6 +75,8 @@ cd /path/to/ohs-open-health-stack
 cp values.yaml values-prod.yaml
 # Or for development:
 cp values.yaml values-dev.yaml
+# Optional local Minikube profile (already provided in this repo):
+cp values-minikube.yaml values-minikube.local.yaml
 ```
 
 **Edit your custom values file** with your environment details:
@@ -171,7 +173,7 @@ kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
   --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
   --from-literal=redis-password=YOUR_REDIS_PASSWORD \
-  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir'
+  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster'
 ```
 
 > **Note:** The password in `openfhir-mongo-uri` must match the password provisioned in the MongoDB cluster. For staging/production, replace this with Sealed Secrets or External Secrets Operator — see [SECRETS.md](SECRETS.md).
@@ -204,6 +206,14 @@ helm install ohs . \
 helm install ohs . \
   --namespace ohs \
   --values values-prod.yaml
+
+# Optional Minikube/local install profile
+set -a; source .env; set +a
+helm upgrade --install ohs . \
+  --namespace ohs \
+  --values values.yaml \
+  --values values-minikube.yaml \
+  --set-string mongodb.openfhir.userPassword="$OPENFHIR_MONGO_PASSWORD"
 
 # Monitor installation progress
 watch kubectl get pods -n ohs

@@ -1,5 +1,16 @@
 # Getting Started: Open Health Stack
 
+## Choose Your Cluster Mode
+
+- Standard Kubernetes cluster: recommended default for home servers and shared clusters.
+- Optional Minikube local profile: useful for laptop-only/local testing.
+
+If you use Minikube, start it before the quick start flow:
+
+```bash
+minikube start --driver=docker
+```
+
 ## Quick Start
 
 ```bash
@@ -17,7 +28,7 @@ kubectl label namespace ohs name=ohs
 kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=ehrbase-user-password=YOUR_PASSWORD \
   --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
-  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir' \
+  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster' \
   --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
   --from-literal=redis-password=YOUR_REDIS_PASSWORD
 
@@ -26,6 +37,14 @@ helm install ohs . -f values.yaml -n ohs
 
 # 4. Watch pods (databases take 5-15 min)
 kubectl get pods -n ohs -w
+```
+
+For Minikube local mode, use the local override file and keep MongoDB user password aligned with your .env value:
+
+```bash
+set -a; source .env; set +a
+helm upgrade --install ohs . -f values.yaml -f values-minikube.yaml -n ohs \
+  --set-string mongodb.openfhir.userPassword="$OPENFHIR_MONGO_PASSWORD"
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full prerequisites and production notes.

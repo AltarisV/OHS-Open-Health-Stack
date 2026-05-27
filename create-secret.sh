@@ -16,6 +16,6 @@ kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=ehrbase-db-password="${EHRBASE_DB_PASSWORD}" \
   --from-literal=eos-db-password="${EOS_DB_PASSWORD}" \
   --from-literal=redis-password="${REDIS_PASSWORD}" \
-  --from-literal=openfhir-mongo-uri="mongodb://openfhir:${OPENFHIR_MONGO_PASSWORD}@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir"
+  --from-literal=openfhir-mongo-uri="mongodb://openfhir:${OPENFHIR_MONGO_PASSWORD}@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster"
 
 echo "Secret 'ohs-credentials' created in namespace 'ohs'."
