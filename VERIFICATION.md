@@ -50,11 +50,11 @@ $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("eh
 Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4" `
   -Headers @{Authorization=$auth}
 
-# openFHIR — FHIR capability statement
-(Invoke-RestMethod "http://localhost:8081/fhir/metadata").resourceType  # expect: "CapabilityStatement"
+# openFHIR — list operational templates (empty array expected on fresh install)
+Invoke-RestMethod "http://localhost:8081/opt"  # or open http://localhost:8081/ for Swagger UI
 
-# Eos — Spring Boot actuator
-(Invoke-RestMethod "http://localhost:8082/actuator/health").status  # expect: "UP"
+# Eos — responds 405 (POST-only) confirming the endpoint exists
+Invoke-WebRequest "http://localhost:8082/person" -Method GET  # expect: 405 Method Not Allowed
 ```
 
 ---
@@ -90,7 +90,8 @@ $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("eh
 $headers = @{Authorization=$auth; "Content-Type"="application/json"; Prefer="return=representation"}
 
 # Create an EHR
-$ehr = Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/ehr" -Method POST -Headers $headers
+$body = '{"_type":"EHR_STATUS","archetype_node_id":"openEHR-EHR-EHR_STATUS.generic.v1","name":{"_type":"DV_TEXT","value":"EHR Status"},"subject":{"external_ref":{"id":{"_type":"GENERIC_ID","value":"patient-001","scheme":"test"},"namespace":"test","type":"PERSON"}},"is_modifiable":true,"is_queryable":true}'
+$ehr = Invoke-RestMethod "http://localhost:8080/ehrbase/rest/openehr/v1/ehr" -Method POST -Headers $headers -Body $body
 $ehrId = $ehr.ehr_id.value
 
 # Upload an openEHR template (OPT file)

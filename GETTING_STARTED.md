@@ -39,7 +39,7 @@ Run each in a separate terminal:
 ```bash
 kubectl port-forward svc/ohs-ehrbase 8080:8080 -n ohs
 kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
-kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
+kubectl port-forward svc/ohs-eos 8082:8080 -n ohs
 ```
 
 | Service | URL | Notes |
