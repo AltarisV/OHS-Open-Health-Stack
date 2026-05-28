@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cohort-explorer-frontend
+description: Cohort Explorer Frontend – Angular web UI for cohort exploration via openEHR
+type: application
+version: 0.1.0
+appVersion: "develop"
+home: https://github.com/highmed/cohort-explorer-frontend
+sources:
+  - https://github.com/highmed/cohort-explorer-frontend
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

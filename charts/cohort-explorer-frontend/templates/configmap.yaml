@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cohort-explorer-frontend.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cohort-explorer-frontend.labels" . | nindent 4 }}
+data:
+  # Runtime configuration for the Angular app.
+  # Mounted at /usr/share/nginx/html/assets/config/config.json inside the container.
+  config.json: |
+    {
+      "env": {
+        "name": {{ .Values.config.env.name | quote }}
+      },
+      "api": {
+        "baseUrl": {{ .Values.config.api.baseUrl | quote }}
+      },
+      "auth": {
+        "baseUrl": {{ .Values.config.auth.baseUrl | quote }},
+        "realm": {{ .Values.config.auth.realm | quote }},
+        "clientId": {{ .Values.config.auth.clientId | quote }}
+      },
+      "legal": {
+        "copyrightOwner": {{ .Values.config.legal.copyrightOwner | quote }},
+        "imprint": {{ .Values.config.legal.imprint | quote }},
+        "imprintUrl": {{ .Values.config.legal.imprintUrl | quote }},
+        "dataProtection": {{ .Values.config.legal.dataProtection | quote }},
+        "dataProtectionUrl": {{ .Values.config.legal.dataProtectionUrl | quote }},
+        "contact": {{ .Values.config.legal.contact | quote }},
+        "contactUrl": {{ .Values.config.legal.contactUrl | quote }}
+      },
+      "welcomePageTitle": {
+        "de": {{ .Values.config.welcomePageTitle.de | quote }},
+        "en": {{ .Values.config.welcomePageTitle.en | quote }}
+      }
+    }

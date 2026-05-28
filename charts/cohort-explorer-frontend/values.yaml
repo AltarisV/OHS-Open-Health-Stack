@@ -1,0 +1,107 @@
+# Cohort Explorer Frontend Helm Chart Values
+# Angular SPA served by nginx (port 80), configured at runtime via ConfigMap-mounted config.json
+
+replicaCount: 1
+
+image:
+  # PIN_VERSION: build from https://github.com/highmed/cohort-explorer-frontend
+  # Build command (run from repo root):
+  #   docker build --build-arg ENVIRONMENT=deploy -t ghcr.io/<org>/cohort-explorer-frontend:develop .
+  #   docker push ghcr.io/<org>/cohort-explorer-frontend:develop
+  repository: ghcr.io/highmed/cohort-explorer-frontend
+  tag: "develop"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  path: /cohort-explorer
+  pathType: Prefix
+  hosts: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# Runtime configuration injected into /assets/config/config.json at startup.
+# The Angular app fetches this file on load – no rebuild required to change these values.
+config:
+  env:
+    name: "production"
+
+  # URL of the cohort-explorer-backend API (must be accessible from the user's browser)
+  api:
+    baseUrl: "https://ohs.example.org/num-portal"  # CHANGE_ME: your external backend URL
+
+  # Keycloak configuration (must match the backend's keycloak.realm)
+  auth:
+    baseUrl: "https://ohs.example.org/auth"  # CHANGE_ME: your Keycloak URL
+    realm: "crr"
+    clientId: "num-portal-webapp"
+
+  # Legal / branding (optional – set to empty strings to disable)
+  legal:
+    copyrightOwner: ""
+    imprint: "none"
+    imprintUrl: ""
+    dataProtection: "none"
+    dataProtectionUrl: ""
+    contact: "url"
+    contactUrl: "https://example.com"  # CHANGE_ME
+
+  # Welcome page titles (leave empty to use defaults)
+  welcomePageTitle:
+    de: ""
+    en: ""
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 101  # nginx user
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

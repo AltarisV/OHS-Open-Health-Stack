@@ -1,0 +1,100 @@
+# Keycloak Helm Chart Values
+# Official image: quay.io/keycloak/keycloak
+# Keycloak uses the shared postgres-cluster for its database.
+# The crr realm and its clients (num-portal, num-portal-webapp) are created automatically
+# on first startup via --import-realm (see config.realmImport.enabled below).
+
+replicaCount: 1
+
+image:
+  repository: quay.io/keycloak/keycloak
+  tag: "24.0"  # PIN_VERSION: check https://quay.io/repository/keycloak/keycloak?tab=tags
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  path: /auth
+  pathType: Prefix
+  hosts: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Keycloak-specific configuration
+config:
+  # Start mode: "start" for production, "start-dev" for local/dev (skips TLS requirements)
+  # In start-dev mode KC_HOSTNAME_STRICT and KC_HTTP_ENABLED are set automatically.
+  startMode: "start-dev"  # CHANGE_ME: use "start" in production
+
+  # Admin credentials
+  adminUser: "admin"  # CHANGE_ME
+  adminPassword: "CHANGE_ME_ADMIN_PASSWORD"  # Inject via Secret (ohs-credentials key: keycloak-admin-password)
+
+  # PostgreSQL database (uses the shared postgres-cluster)
+  database:
+    host: "postgres-cluster-rw.ohs.svc.cluster.local"  # CHANGE_ME: update namespace if different
+    port: 5432
+    name: "keycloak"
+    username: "keycloak"
+    password: "CHANGE_ME_DATABASE_PASSWORD"  # Inject via Secret (ohs-credentials key: keycloak-db-password)
+
+  # Hostname / proxy settings (required in "start" mode)
+  # Set to the external URL where Keycloak will be reached, e.g. https://ohs.example.org/auth
+  hostname: "localhost"  # CHANGE_ME: your external hostname (without path)
+  httpEnabled: true      # Set false in production when behind TLS-terminating ingress
+  proxyHeaders: "xforwarded"  # edge|reencrypt|xforwarded – match your ingress setup
+
+  # Automatic realm import on first startup.
+  # A busybox initContainer substitutes the client secret placeholder and writes the
+  # processed JSON to an emptyDir that Keycloak imports via --import-realm.
+  # Import is idempotent: if the realm already exists, Keycloak skips it.
+  realmImport:
+    enabled: true
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /auth/health/live
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /auth/health/ready
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

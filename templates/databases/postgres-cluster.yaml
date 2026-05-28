@@ -16,6 +16,40 @@ stringData:
   username: eos
   password: {{ .Values.postgres.eos.userPassword | default "eos" | quote }}
 {{- end }}
+{{- if .Values.postgres.numportal.enabled }}
+---
+# Secret for numportal PostgreSQL role (used by CNPG managed roles)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-numportal-user-secret
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+type: kubernetes.io/basic-auth
+stringData:
+  username: numportal
+  password: {{ .Values.postgres.numportal.userPassword | default "numportal" | quote }}
+{{- end }}
+{{- if .Values.postgres.keycloak.enabled }}
+---
+# Secret for keycloak PostgreSQL role (used by CNPG managed roles)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-keycloak-user-secret
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+type: kubernetes.io/basic-auth
+stringData:
+  username: keycloak
+  password: {{ .Values.postgres.keycloak.userPassword | default "keycloak" | quote }}
+{{- end }}
 ---
 # PostgreSQL Cluster for EHRbase
 {{- if .Values.postgres.ehrbase.enabled }}
@@ -68,6 +102,18 @@ spec:
         - "CREATE ROLE eos WITH LOGIN;"
         - "CREATE DATABASE eos_omop OWNER eos;"
         - "GRANT ALL PRIVILEGES ON DATABASE eos_omop TO eos;"
+        {{- if .Values.postgres.numportal.enabled }}
+        # Create numportal role and database (for Cohort Explorer Backend)
+        - "CREATE ROLE numportal WITH LOGIN;"
+        - "CREATE DATABASE numportal OWNER numportal;"
+        - "GRANT ALL PRIVILEGES ON DATABASE numportal TO numportal;"
+        {{- end }}
+        {{- if .Values.postgres.keycloak.enabled }}
+        # Create keycloak role and database (for Keycloak IAM)
+        - "CREATE ROLE keycloak WITH LOGIN;"
+        - "CREATE DATABASE keycloak OWNER keycloak;"
+        - "GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;"
+        {{- end }}
       postInitApplicationSQL:
         # ehrbase database setup (run in ehrbase db as superuser)
         - "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
@@ -108,6 +154,20 @@ spec:
         login: true
         passwordSecret:
           name: postgres-eos-user-secret
+      {{- if .Values.postgres.numportal.enabled }}
+      - name: numportal
+        ensure: present
+        login: true
+        passwordSecret:
+          name: postgres-numportal-user-secret
+      {{- end }}
+      {{- if .Values.postgres.keycloak.enabled }}
+      - name: keycloak
+        ensure: present
+        login: true
+        passwordSecret:
+          name: postgres-keycloak-user-secret
+      {{- end }}
   
   # Resource requests and limits
   resources:

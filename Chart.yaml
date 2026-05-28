@@ -48,4 +48,13 @@ dependencies:
   - name: openfhir
     version: "0.1.0"
     condition: openfhir.enabled
+  - name: cohort-explorer-backend
+    version: "0.1.0"
+    condition: cohort-explorer-backend.enabled
+  - name: cohort-explorer-frontend
+    version: "0.1.0"
+    condition: cohort-explorer-frontend.enabled
+  - name: keycloak
+    version: "0.1.0"
+    condition: keycloak.enabled
 

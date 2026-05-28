@@ -1,0 +1,142 @@
+# Cohort Explorer Backend Helm Chart Values
+# Spring Boot API server (port 8090) for cohort management on top of openEHR/EHRbase
+
+replicaCount: 1
+
+image:
+  # PIN_VERSION: build from https://github.com/highmed/cohort-explorer-backend
+  # and push to your own registry, e.g.:
+  #   docker build -t ghcr.io/<org>/cohort-explorer-backend:develop .
+  #   docker push ghcr.io/<org>/cohort-explorer-backend:develop
+  repository: ghcr.io/highmed/cohort-explorer-backend
+  tag: "develop"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8090
+  targetPort: 8090
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  path: /num-portal
+  pathType: Prefix
+  hosts: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# Cohort Explorer Backend-specific configuration
+config:
+  # PostgreSQL database for num-portal (separate from EHRbase DB)
+  database:
+    host: "postgres-cluster.ohs.svc.cluster.local"  # CHANGE_ME: update namespace if different
+    port: 5432
+    name: "numportal"
+    schema: "num"
+    username: "numportal"
+    password: "CHANGE_ME_DATABASE_PASSWORD"  # Inject via Secret (ohs-credentials key: numportal-db-password)
+
+  # Keycloak / OAuth2 configuration (external prerequisite – deploy Keycloak separately)
+  keycloak:
+    url: "http://keycloak.ohs.svc.cluster.local:8080"  # CHANGE_ME: your Keycloak URL
+    realm: "crr"
+    clientId: "num-portal"
+    clientSecret: "CHANGE_ME_CLIENT_SECRET"  # Inject via Secret (ohs-credentials key: numportal-keycloak-secret)
+
+  # EHRbase connection (reuse the existing EHRbase deployment)
+  ehrbase:
+    restApiUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase/"  # CHANGE_ME: update service name/namespace
+    username: "ehrbase_user"
+    password: "CHANGE_ME_SECURE_PASSWORD"  # Inject via Secret (ohs-credentials key: ehrbase-user-password)
+    adminUsername: "ehrbase-admin"
+    adminPassword: "CHANGE_ME_ADMIN_PASSWORD"  # Inject via Secret (ohs-credentials key: ehrbase-admin-password)
+
+  # Public URL of this deployment (used for redirect URIs, links, etc.)
+  numUrl: "https://ohs.example.org"  # CHANGE_ME: your external URL
+
+  # CORS – allow the frontend origin (update to match your actual frontend URL)
+  corsAllowedOrigins: "*"  # CHANGE_ME: restrict in production, e.g. "https://ohs.example.org"
+
+  # Feature flags (all default to application.yml defaults; set to override)
+  features:
+    searchByManager: "false"
+    handleUser: "true"
+    workingWithAql: "true"
+    cohortExplorer: "true"
+    handleContent: "true"
+    handleUserMessages: "true"
+    handleOrganization: "true"
+    handleProject: "true"
+
+  # Pseudonymity (used for cohort size privacy masking)
+  privacy:
+    minHits: 30
+    pseudonymitySecret: "CHANGE_ME_PSEUDONYMITY_SECRET"  # CHANGE_ME: random secret string
+
+  # Mail (optional – set enabled=false to skip mail integration)
+  mail:
+    enabled: false
+    host: "smtp.example.org"
+    port: 587
+    username: ""
+    password: ""
+    from: ""
+
+  # Virus scanning (ClamAV – disable for dev; enable in production)
+  virusScan:
+    enabled: false
+    host: "localhost"
+    port: 3310
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8091
+  initialDelaySeconds: 90
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8091
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8091"
+  prometheus.io/path: "/actuator/prometheus"
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

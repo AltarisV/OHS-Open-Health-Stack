@@ -19,7 +19,7 @@ ehrbase:
     enabled: false
   config:
     database:
-      host: "postgres-cluster-rw.ohs.svc.cluster.local"
+      host: "postgres-cluster-rw"
 
 openfhir:
   replicaCount: 1
@@ -36,7 +36,7 @@ openfhir:
     enabled: false
   config:
     ehrbase:
-      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"
+      baseUrl: "http://ohs-ehrbase:8080"
 
 eos:
   replicaCount: 1
@@ -53,9 +53,83 @@ eos:
     enabled: false
   config:
     database:
-      host: "postgres-cluster-rw.ohs.svc.cluster.local"
+      host: "postgres-cluster-rw"
     ehrbase:
-      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"
+      baseUrl: "http://ohs-ehrbase:8080"
     jvm:
       maxHeapSize: "1g"
+
+# ── Cohort Explorer (disabled until images are built locally) ──────────────
+# To enable:
+#   1. Clone and build into minikube's Docker daemon:
+#        eval $(minikube docker-env)
+#        git clone https://github.com/highmed/cohort-explorer-backend
+#        docker build -t cohort-explorer-backend:local cohort-explorer-backend/
+#        git clone https://github.com/highmed/cohort-explorer-frontend
+#        docker build --build-arg ENVIRONMENT=deploy \
+#          -t cohort-explorer-frontend:local cohort-explorer-frontend/
+#   2. Set postgres.numportal.enabled=true and add the required secret keys
+#   3. Flip enabled: true below
+
+cohort-explorer-backend:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: cohort-explorer-backend
+    tag: "local"
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    database:
+      host: "postgres-cluster-rw"
+    ehrbase:
+      restApiUrl: "http://ohs-ehrbase:8080/ehrbase/"
+
+cohort-explorer-frontend:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: cohort-explorer-frontend
+    tag: "local"
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+
+keycloak:
+  enabled: false
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "768Mi"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    startMode: "start-dev"
+    database:
+      host: "postgres-cluster-rw"
       minHeapSize: "256m"

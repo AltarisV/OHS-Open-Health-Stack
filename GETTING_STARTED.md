@@ -25,12 +25,8 @@ helm install mongodb-operator mongodb/community-operator -n mongodb-operator --c
 # 2. Create namespace and credentials secret
 kubectl create namespace ohs
 kubectl label namespace ohs name=ohs
-kubectl create secret generic ohs-credentials -n ohs \
-  --from-literal=ehrbase-user-password=YOUR_PASSWORD \
-  --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
-  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster' \
-  --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
-  --from-literal=redis-password=YOUR_REDIS_PASSWORD
+cp .env.example .env  # fill in all values, then:
+bash create-secret.sh
 
 # 3. Deploy
 helm install ohs . -f values.yaml -n ohs
@@ -58,7 +54,15 @@ Run each in a separate terminal:
 ```bash
 kubectl port-forward svc/ohs-ehrbase 8080:8080 -n ohs
 kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
-kubectl port-forward svc/ohs-eos 8082:8080 -n ohs
+kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
+```
+
+If Cohort Explorer is enabled, add:
+
+```bash
+kubectl port-forward svc/ohs-keycloak 8083:8080 -n ohs
+kubectl port-forward svc/ohs-cohort-explorer-backend 8084:8090 -n ohs
+kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
 ```
 
 | Service | URL | Notes |
@@ -67,6 +71,9 @@ kubectl port-forward svc/ohs-eos 8082:8080 -n ohs
 | EHRbase Swagger | http://localhost:8080/swagger-ui/ | |
 | openFHIR | http://localhost:8081/fhir/metadata | FHIR R4 |
 | Eos | http://localhost:8082/actuator/health | Spring Boot actuator |
+| Keycloak | http://localhost:8083/auth | Admin console: /auth/admin |
+| Cohort Explorer API | http://localhost:8084/ | Requires Keycloak enabled |
+| Cohort Explorer UI | http://localhost:8085/ | Angular SPA |
 
 See [VERIFICATION.md](VERIFICATION.md) for end-to-end testing steps.
 
@@ -90,6 +97,60 @@ kubectl exec -it postgres-cluster-1 -n ohs -- psql -U ehrbase -d ehrbase
 # MongoDB shell
 kubectl exec -it mongodb-cluster-0 -n ohs -- mongosh -u root -p YOUR_ROOT_PASS
 ```
+
+---
+
+## Building Cohort Explorer (Phase 12, Optional)
+
+No published Docker images exist upstream — they must be built from source.
+
+```bash
+git clone https://github.com/highmed/cohort-explorer-backend
+docker build -t YOUR_REGISTRY/cohort-explorer-backend:latest cohort-explorer-backend/
+
+git clone https://github.com/highmed/cohort-explorer-frontend
+docker build --build-arg ENVIRONMENT=deploy \
+  -t YOUR_REGISTRY/cohort-explorer-frontend:latest cohort-explorer-frontend/
+```
+
+**Local development (no registry):** build directly into the cluster's Docker daemon instead:
+
+```bash
+eval $(minikube docker-env)
+docker build -t cohort-explorer-backend:local cohort-explorer-backend/
+docker build --build-arg ENVIRONMENT=deploy -t cohort-explorer-frontend:local cohort-explorer-frontend/
+```
+
+Set the image coordinates in your values file and enable the components:
+
+```yaml
+cohort-explorer-backend:
+  enabled: true
+  image:
+    repository: YOUR_REGISTRY/cohort-explorer-backend  # or cohort-explorer-backend for local
+    tag: "latest"
+    pullPolicy: IfNotPresent                            # or Never for local
+
+cohort-explorer-frontend:
+  enabled: true
+  image:
+    repository: YOUR_REGISTRY/cohort-explorer-frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+postgres:
+  numportal:
+    enabled: true
+  keycloak:
+    enabled: true
+
+keycloak:
+  enabled: true
+```
+
+The `crr` Keycloak realm and both clients (`num-portal`, `num-portal-webapp`) are created
+automatically on first Keycloak startup — no manual admin console steps required.
+See [NEXT_STEPS.md](NEXT_STEPS.md) for full prerequisites and secret keys needed.
 
 ---
 

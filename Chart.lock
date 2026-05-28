@@ -1,0 +1,27 @@
+dependencies:
+- name: cloudnative-pg
+  repository: ""
+  version: 0.1.0
+- name: mongodb-operator
+  repository: ""
+  version: 0.1.0
+- name: ehrbase
+  repository: ""
+  version: 0.1.0
+- name: eos
+  repository: ""
+  version: 0.1.0
+- name: openfhir
+  repository: ""
+  version: 0.1.0
+- name: cohort-explorer-backend
+  repository: ""
+  version: 0.1.0
+- name: cohort-explorer-frontend
+  repository: ""
+  version: 0.1.0
+- name: keycloak
+  repository: ""
+  version: 0.1.0
+digest: sha256:7179fb897d42782644fd4d967f685add0f923ba7c875a695d796c9e8e817598a
+generated: "2026-05-28T15:59:52.569298965+02:00"

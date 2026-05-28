@@ -5,12 +5,18 @@
 The `ohs-credentials` secret must be created before `helm install`:
 
 | Key | Purpose |
-|-----|---------|
+|-----|----------|
 | `ehrbase-user-password` | EHRbase basic auth password |
 | `ehrbase-db-password` | PostgreSQL password for EHRbase |
+| `ehrbase-admin-password` | EHRbase admin API password (used by cohort-explorer-backend) |
 | `openfhir-mongo-uri` | Full MongoDB connection string including password |
 | `eos-db-password` | PostgreSQL password for Eos |
 | `redis-password` | Redis password (required if openEHRTool-v2 is enabled) |
+| `keycloak-admin-password` | Keycloak admin console password |
+| `keycloak-db-password` | PostgreSQL password for Keycloak |
+| `numportal-db-password` | PostgreSQL password for the cohort-explorer-backend |
+| `numportal-keycloak-secret` | Client secret for the `num-portal` Keycloak client (auto-imported into realm `crr`) |
+| `numportal-pseudonymity-secret` | Random secret used by the cohort-explorer-backend for pseudonymity masking |
 
 > The password in `openfhir-mongo-uri` **must exactly match** `mongodb.openfhir.userPassword` in your values file.
 
@@ -22,9 +28,15 @@ The `ohs-credentials` secret must be created before `helm install`:
 kubectl create secret generic ohs-credentials --namespace ohs \
   --from-literal=ehrbase-user-password=YOUR_SECURE_PASSWORD \
   --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
+  --from-literal=ehrbase-admin-password=YOUR_ADMIN_PASSWORD \
   --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir' \
   --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
-  --from-literal=redis-password=YOUR_REDIS_PASSWORD
+  --from-literal=redis-password=YOUR_REDIS_PASSWORD \
+  --from-literal=keycloak-admin-password=YOUR_KC_ADMIN_PASSWORD \
+  --from-literal=keycloak-db-password=YOUR_KC_DB_PASSWORD \
+  --from-literal=numportal-db-password=YOUR_NUMPORTAL_DB_PASSWORD \
+  --from-literal=numportal-keycloak-secret=$(openssl rand -base64 32) \
+  --from-literal=numportal-pseudonymity-secret=$(openssl rand -base64 32)
 ```
 
 Generate a strong password: `openssl rand -base64 32`

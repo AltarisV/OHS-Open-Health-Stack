@@ -95,6 +95,18 @@ EHR=$(curl -s -X POST \
   -d '{"_type":"EHR_STATUS","archetype_node_id":"openEHR-EHR-EHR_STATUS.generic.v1","name":{"_type":"DV_TEXT","value":"EHR Status"},"subject":{"external_ref":{"id":{"_type":"GENERIC_ID","value":"patient-001","scheme":"test"},"namespace":"test","type":"PERSON"}},"is_modifiable":true,"is_queryable":true}' \
   http://localhost:8080/ehrbase/rest/openehr/v1/ehr)
 EHR_ID=$(echo "$EHR" | jq -r '.ehr_id.value')
+echo "Created EHR: $EHR_ID"
+
+# Retrieve the EHR by ID
+curl -s -H "Authorization: Basic $AUTH" \
+  http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$EHR_ID | jq .
+
+# List all EHRs (AQL)
+curl -s -X POST \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{"q":"SELECT e/ehr_id/value FROM EHR e"}' \
+  http://localhost:8080/ehrbase/rest/openehr/v1/query/aql | jq .
 
 # Upload an openEHR template (OPT file)
 # curl -s -X POST \

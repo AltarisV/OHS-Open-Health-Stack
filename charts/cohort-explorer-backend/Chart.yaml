@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cohort-explorer-backend
+description: Cohort Explorer Backend – Spring Boot API for cohort management using openEHR
+type: application
+version: 0.1.0
+appVersion: "develop"
+home: https://github.com/highmed/cohort-explorer-backend
+sources:
+  - https://github.com/highmed/cohort-explorer-backend
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

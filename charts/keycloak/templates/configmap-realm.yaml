@@ -1,0 +1,67 @@
+{{- if .Values.config.realmImport.enabled }}
+# ConfigMap holding the crr realm definition for automatic import on first startup.
+# Keycloak reads files from /opt/keycloak/data/import/ when started with --import-realm.
+# If the realm already exists (e.g. after a helm upgrade), Keycloak skips the import — it is idempotent.
+#
+# The string __NUM_PORTAL_CLIENT_SECRET__ is a placeholder replaced at pod start time
+# by a busybox initContainer using the value from ohs-credentials/numportal-keycloak-secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.fullname" . }}-realm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+data:
+  crr-realm.json: |
+    {
+      "realm": "crr",
+      "enabled": true,
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": false,
+      "editUsernameAllowed": false,
+      "roles": {
+        "realm": [
+          { "name": "SUPER_ADMIN",         "composite": false },
+          { "name": "ORGANIZATION_ADMIN",   "composite": false },
+          { "name": "RESEARCHER",           "composite": false },
+          { "name": "STUDY_COORDINATOR",    "composite": false },
+          { "name": "STUDY_APPROVER",       "composite": false },
+          { "name": "CRITERIA_EDITOR",      "composite": false },
+          { "name": "CONTENT_ADMIN",        "composite": false }
+        ]
+      },
+      "clients": [
+        {
+          "clientId": "num-portal",
+          "name": "NUM Portal Backend",
+          "description": "Confidential client used by cohort-explorer-backend for service accounts and direct access grants",
+          "enabled": true,
+          "publicClient": false,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "__NUM_PORTAL_CLIENT_SECRET__",
+          "standardFlowEnabled": false,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true,
+          "protocol": "openid-connect"
+        },
+        {
+          "clientId": "num-portal-webapp",
+          "name": "NUM Portal Frontend",
+          "description": "Public client used by the cohort-explorer-frontend Angular SPA",
+          "enabled": true,
+          "publicClient": true,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "redirectUris": ["*"],
+          "webOrigins": ["*"],
+          "protocol": "openid-connect"
+        }
+      ]
+    }
+{{- end }}

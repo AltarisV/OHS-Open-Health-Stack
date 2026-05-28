@@ -1,0 +1,12 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak – Identity and Access Management (required by Cohort Explorer)
+type: application
+version: 0.1.0
+appVersion: "24.0"
+home: https://www.keycloak.org
+sources:
+  - https://github.com/keycloak/keycloak
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org
