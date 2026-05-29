@@ -84,6 +84,23 @@ load_table() {
 
   local size
   size=$(du -sh "$csv_file" | cut -f1)
+
+  # Skip tables that already have rows unless FORCE_RELOAD=1.
+  # This lets you resume a failed run without re-loading hours of already-loaded data.
+  if [[ "${FORCE_RELOAD:-0}" != "1" ]]; then
+    local row_count
+    row_count=$(psql_exec "$pod" -t -c \
+      "SELECT COUNT(*) FROM ${CDM_SCHEMA}.${table};" 2>/dev/null | tr -d ' \n')
+    if [[ "$row_count" =~ ^[0-9]+$ && "$row_count" -gt 0 ]]; then
+      echo "  [SKIP] $table ($size) — already loaded ($row_count rows)"
+      return 0
+    fi
+  fi
+
+  # Truncate only this table before loading (clears any partial data from a
+  # previous failed attempt without touching other already-loaded tables).
+  psql_exec "$pod" -c "TRUNCATE ${CDM_SCHEMA}.${table} CASCADE;" 2>/dev/null || true
+
   echo "  ┌ $table ($size)"
   printf "  └ "
 
@@ -94,15 +111,15 @@ load_table() {
   #     Required for circular FK refs (concept ↔ concept_class ↔ domain ↔ vocab).
   #     Automatically resets when the session ends.
   #
-  #   NULL '\N' — in CSV mode the default null string is '' (unquoted empty field
-  #     = NULL).  Changing it to '\N' means empty fields become '' (empty string),
-  #     satisfying NOT NULL constraints like vocabulary.vocabulary_version.
+  #   Empty fields use the default CSV null handling (unquoted empty = NULL).
+  #     vocabulary.vocabulary_version has its incorrect NOT NULL constraint dropped
+  #     in the schema pre-flight below, so NULL is safe there too.
   #
   #   -v ON_ERROR_STOP=1 — make psql exit immediately on any SQL error instead of
   #     continuing to read the remaining CSV bytes as SQL statements.
   {
     printf "SET session_replication_role = replica;\n"
-    printf "COPY %s.%s (%s) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', HEADER true, QUOTE E'\\b', NULL '\\N');\n" \
+    printf "COPY %s.%s (%s) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', HEADER true, QUOTE E'\\b');\n" \
       "$CDM_SCHEMA" "$table" "$col_list"
     if command -v pv &>/dev/null; then
       pv -petrs "$(stat -c%s "$csv_file")" "$csv_file"
@@ -149,42 +166,24 @@ if [[ "$TABLE_COUNT" != "1" ]]; then
   exit 1
 fi
 
-# Check whether vocab is already loaded
-CONCEPT_COUNT=$(psql_exec "$PRIMARY_POD" -t -c \
-  "SELECT COUNT(*) FROM ${CDM_SCHEMA}.concept;" 2>/dev/null | tr -d ' ')
+# Check whether vocab is fully loaded (use drug_strength as the final sentinel —
+# only present and populated when the entire pipeline completed successfully).
+DRUG_COUNT=$(psql_exec "$PRIMARY_POD" -t -c "
+  SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='${CDM_SCHEMA}' AND table_name='drug_strength'
+  ) THEN (SELECT COUNT(*) FROM ${CDM_SCHEMA}.drug_strength)::text
+    ELSE '0' END;" 2>/dev/null | tr -d ' \n')
 
-if [[ "$CONCEPT_COUNT" -gt "0" ]]; then
-  echo "Vocabulary already loaded (concept table has ${CONCEPT_COUNT} rows)."
-  echo "To reload, pass FORCE_RELOAD=1."
+if [[ "$DRUG_COUNT" =~ ^[0-9]+$ && "$DRUG_COUNT" -gt 0 ]]; then
+  echo "Vocabulary fully loaded (drug_strength: ${DRUG_COUNT} rows)."
   if [[ "${FORCE_RELOAD:-0}" != "1" ]]; then
-    exit 0
+    echo "Skipping data load — tables already populated. Pass FORCE_RELOAD=1 to reload."
+    echo ""
+  else
+    echo "FORCE_RELOAD=1 set — will reload all tables ..."
   fi
-  echo "FORCE_RELOAD=1 set — reloading ..."
 fi
-
-# Always truncate all vocab tables before loading.  Even on a first run some
-# tables (e.g. concept_class, domain) may already have rows from a previous
-# failed attempt.  Starting clean avoids duplicate-key violations.
-# Uses a DO block so tables that don't exist yet are silently skipped.
-echo "Truncating vocab tables ..."
-psql_exec "$PRIMARY_POD" -c "
-DO \$\$
-DECLARE
-  t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'drug_strength','concept','concept_relationship',
-    'concept_ancestor','concept_synonym','vocabulary',
-    'relationship','concept_class','domain'
-  ] LOOP
-    IF EXISTS (
-      SELECT 1 FROM information_schema.tables
-      WHERE table_schema = '${CDM_SCHEMA}' AND table_name = t
-    ) THEN
-      EXECUTE format('TRUNCATE ${CDM_SCHEMA}.%I CASCADE', t);
-    END IF;
-  END LOOP;
-END \$\$;"
 
 echo "Loading vocabulary tables (streaming via stdin — no file transfer to pod)..."
 if command -v pv &>/dev/null; then
@@ -242,7 +241,11 @@ CREATE TABLE IF NOT EXISTS ${CDM_SCHEMA}.drug_strength (
   valid_start_date          date    NOT NULL,
   valid_end_date            date    NOT NULL,
   invalid_reason            varchar(1)
-);"
+);
+-- vocabulary_version is nullable per OMOP CDM spec; Hibernate adds NOT NULL
+-- incorrectly.  Drop it so empty fields in the CSV become NULL (not '').
+ALTER TABLE ${CDM_SCHEMA}.vocabulary
+  ALTER COLUMN vocabulary_version DROP NOT NULL;"
 echo ""
 
 # Load order respects foreign-key dependencies:
@@ -262,17 +265,17 @@ echo "======================================================"
 echo " Verification"
 echo "======================================================"
 psql_exec "$PRIMARY_POD" -c "
-SELECT table_name, to_char(COUNT(*), 'FM999,999,999') AS rows
+SELECT table_name, to_char(row_count, 'FM999,999,999') AS rows
 FROM (
-  SELECT 'concept'              AS table_name, COUNT(*) FROM ${CDM_SCHEMA}.concept
-  UNION ALL SELECT 'vocabulary',              COUNT(*) FROM ${CDM_SCHEMA}.vocabulary
-  UNION ALL SELECT 'concept_class',           COUNT(*) FROM ${CDM_SCHEMA}.concept_class
-  UNION ALL SELECT 'domain',                  COUNT(*) FROM ${CDM_SCHEMA}.domain
-  UNION ALL SELECT 'relationship',            COUNT(*) FROM ${CDM_SCHEMA}.relationship
-  UNION ALL SELECT 'concept_relationship',    COUNT(*) FROM ${CDM_SCHEMA}.concept_relationship
-  UNION ALL SELECT 'concept_ancestor',        COUNT(*) FROM ${CDM_SCHEMA}.concept_ancestor
-  UNION ALL SELECT 'concept_synonym',         COUNT(*) FROM ${CDM_SCHEMA}.concept_synonym
-  UNION ALL SELECT 'drug_strength',           COUNT(*) FROM ${CDM_SCHEMA}.drug_strength
+  SELECT 'concept'              AS table_name, COUNT(*) AS row_count FROM ${CDM_SCHEMA}.concept
+  UNION ALL SELECT 'vocabulary',               COUNT(*) FROM ${CDM_SCHEMA}.vocabulary
+  UNION ALL SELECT 'concept_class',            COUNT(*) FROM ${CDM_SCHEMA}.concept_class
+  UNION ALL SELECT 'domain',                   COUNT(*) FROM ${CDM_SCHEMA}.domain
+  UNION ALL SELECT 'relationship',             COUNT(*) FROM ${CDM_SCHEMA}.relationship
+  UNION ALL SELECT 'concept_relationship',     COUNT(*) FROM ${CDM_SCHEMA}.concept_relationship
+  UNION ALL SELECT 'concept_ancestor',         COUNT(*) FROM ${CDM_SCHEMA}.concept_ancestor
+  UNION ALL SELECT 'concept_synonym',          COUNT(*) FROM ${CDM_SCHEMA}.concept_synonym
+  UNION ALL SELECT 'drug_strength',            COUNT(*) FROM ${CDM_SCHEMA}.drug_strength
 ) t ORDER BY table_name;"
 
 echo ""
@@ -308,11 +311,18 @@ if [[ -n "$TMP_IDX" && -s "$TMP_IDX" ]]; then
   # Replace placeholder with the configured schema
   sed -i "s/@cdmDatabaseSchema/${CDM_SCHEMA}/g" "$TMP_IDX"
 
+  # Strip CLUSTER commands — CLUSTER physically rewrites the entire table sorted
+  # by the index.  On constrained environments (minikube) it can run for many
+  # hours on large tables like concept_ancestor (69M rows).  The indices alone
+  # provide the query-performance benefit; CLUSTER is a marginal extra optimisation
+  # that is not worth the cost in a development deployment.
+  sed -i '/^CLUSTER /d' "$TMP_IDX"
+
   echo " Creating indices (this runs CLUSTER on several large tables — may take minutes) ..."
   # Run with ON_ERROR_STOP=0 so already-existing indices don't abort the whole script.
   # Use -i to forward the local SQL file through stdin to psql inside the pod.
   kube exec -i -n "$NAMESPACE" "$PRIMARY_POD" -- \
-    psql -U postgres -d "$DB_NAME" --set ON_ERROR_STOP=0 -q -f - \
+    psql -U postgres -d "$DB_NAME" --set ON_ERROR_STOP=0 -f - \
     < "$TMP_IDX" || true
   echo " Indices created."
 fi

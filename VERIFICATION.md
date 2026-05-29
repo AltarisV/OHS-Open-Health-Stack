@@ -59,6 +59,60 @@ curl -o /dev/null -w "%{http_code}\n" http://localhost:8082/person  # expect: 40
 
 ---
 
+## Database Access
+
+### Quick psql — no password needed inside the pod
+
+```bash
+# Run a query directly in the primary pod (peer auth, no password)
+minikube kubectl -- exec -n ohs postgres-cluster-1 -- \
+  psql -U postgres -d eos_omop -c "SELECT version();"
+```
+
+### Port-forward + external SQL client (DBeaver, DataGrip, pgAdmin, etc.)
+
+```bash
+# Forward postgres to localhost
+minikube kubectl -- port-forward svc/postgres-cluster-rw 5432:5432 -n ohs &
+
+# Retrieve the superuser password
+PGPASSWORD=$(minikube kubectl -- get secret postgres-cluster-superuser -n ohs \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+# Connect with psql
+PGPASSWORD=$PGPASSWORD psql -h localhost -p 5432 -U postgres -d eos_omop
+```
+
+Connect any SQL client to: `localhost:5432`, database `eos_omop`, user `postgres`, password from the command above.
+
+### Useful OMOP queries
+
+```bash
+EXEC="minikube kubectl -- exec -n ohs postgres-cluster-1 -- psql -U postgres -d eos_omop -c"
+
+# Table sizes and approximate row counts
+$EXEC "SELECT relname AS table, reltuples::bigint AS approx_rows,
+         pg_size_pretty(pg_total_relation_size(oid)) AS size
+       FROM pg_class
+       WHERE relnamespace = 'public'::regnamespace AND relkind = 'r'
+       ORDER BY reltuples DESC;"
+
+# Vocabulary overview
+$EXEC "SELECT vocabulary_id, vocabulary_name FROM vocabulary ORDER BY 1;"
+
+# Concept search
+$EXEC "SELECT concept_id, concept_name, domain_id, vocabulary_id
+       FROM concept WHERE concept_name ILIKE '%myocardial infarction%' LIMIT 10;"
+
+# Clinical data counts (populated by Eos ETL)
+$EXEC "SELECT 'person' AS tbl, COUNT(*) FROM person
+       UNION ALL SELECT 'condition_occurrence', COUNT(*) FROM condition_occurrence
+       UNION ALL SELECT 'measurement', COUNT(*) FROM measurement
+       UNION ALL SELECT 'drug_exposure', COUNT(*) FROM drug_exposure;"
+```
+
+---
+
 ## End-to-End Functional Testing
 
 ### Load OMOP CDM Vocabulary Tables (required for Eos mappings)
