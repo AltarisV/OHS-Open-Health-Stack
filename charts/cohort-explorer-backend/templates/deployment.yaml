@@ -53,6 +53,8 @@ spec:
         # ── Keycloak / OAuth2 ──────────────────────────────────────────────
         - name: KEYCLOAK_URL
           value: {{ .Values.config.keycloak.url | quote }}
+        # Explicit provider config so Spring Security finds the provider in all contexts
+        # (including Feign child contexts that don't inherit YAML property sources)
         - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_USERSTORECLIENT_CLIENT_ID
           value: {{ .Values.config.keycloak.clientId | quote }}
         - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_USERSTORECLIENT_CLIENT_SECRET
@@ -60,6 +62,12 @@ spec:
             secretKeyRef:
               name: ohs-credentials
               key: numportal-keycloak-secret
+        - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_USERSTORECLIENT_AUTHORIZATION_GRANT_TYPE
+          value: "client_credentials"
+        - name: SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_USERSTORECLIENT_TOKEN_URI
+          value: "{{ .Values.config.keycloak.url }}/realms/{{ .Values.config.keycloak.realm }}/protocol/openid-connect/token"
+        - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+          value: "{{ .Values.config.keycloak.url }}/realms/{{ .Values.config.keycloak.realm }}/protocol/openid-connect/certs"
 
         # ── EHRbase ────────────────────────────────────────────────────────
         - name: EHRBASE_REST_API_URL
@@ -125,6 +133,23 @@ spec:
           value: {{ .Values.config.mail.password | quote }}
         - name: NUM_OPERATOR
           value: ""
+
+        # ── Attachment database ────────────────────────────────────────────
+        # AttachmentService is @ConditionalOnProperty(num.enableAttachmentDatabase=true)
+        # and ProjectMapper unconditionally requires it, so we must enable it.
+        - name: NUM_ENABLEATTACHMENTDATABASE
+          value: {{ .Values.config.attachmentDatabase.enabled | quote }}
+        - name: SPRING_DATASOURCE_NUMPORTALATTACHMENT_URL
+          value: "jdbc:postgresql://{{ .Values.config.database.host }}:{{ .Values.config.database.port }}/{{ .Values.config.database.name }}?currentSchema={{ .Values.config.attachmentDatabase.schema }}"
+        - name: SPRING_DATASOURCE_NUMPORTALATTACHMENT_USERNAME
+          value: {{ .Values.config.database.username | quote }}
+        - name: SPRING_DATASOURCE_NUMPORTALATTACHMENT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ohs-credentials
+              key: numportal-db-password
+        - name: SPRING_FLYWAY_NUMPORTALATTACHMENT_LOCATIONS
+          value: "classpath:db/migration/num-portal-attachment"
 
         # ── Virus scanning (ClamAV) ────────────────────────────────────────
         - name: NUM_FILEVIRUSSCANENABLED

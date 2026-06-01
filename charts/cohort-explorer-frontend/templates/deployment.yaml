@@ -40,6 +40,10 @@ spec:
           mountPath: /usr/share/nginx/html/assets/config/config.json
           subPath: config.json
           readOnly: true
+        - name: app-config
+          mountPath: /usr/share/nginx/html/assets/config/config.deploy.json
+          subPath: config.deploy.json
+          readOnly: true
 
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:

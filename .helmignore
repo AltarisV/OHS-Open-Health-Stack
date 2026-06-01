@@ -1,0 +1,22 @@
+# Patterns to ignore when building packages.
+# This supports shell glob matching, relative path matching, and
+# negation (prefixed with !). Only one pattern per line.
+.DS_Store
+# Common VCS dirs
+.git/
+.gitignore
+.gitmodules
+# CI/build artifacts
+.github/
+# Large data files — not part of the Helm chart
+vocab/
+*.csv
+*.zip
+# Editor/IDE
+.vscode/
+*.swp
+*.bak
+# Local env
+.env
+cohort-builds/
+/tmp/

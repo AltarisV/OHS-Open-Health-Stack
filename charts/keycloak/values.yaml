@@ -57,6 +57,9 @@ config:
   # Hostname / proxy settings (required in "start" mode)
   # Set to the external URL where Keycloak will be reached, e.g. https://ohs.example.org/auth
   hostname: "localhost"  # CHANGE_ME: your external hostname (without path)
+  # Full frontend URL override (KC_HOSTNAME_URL). Required when port-forwarding or using a
+  # non-standard port, e.g. "http://localhost:8083/auth". Overrides hostname above.
+  hostnameUrl: ""  # CHANGE_ME for local dev: http://localhost:8083/auth
   httpEnabled: true      # Set false in production when behind TLS-terminating ingress
   proxyHeaders: "xforwarded"  # edge|reencrypt|xforwarded – match your ingress setup
 

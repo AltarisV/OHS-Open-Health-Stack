@@ -65,8 +65,16 @@ spec:
               key: keycloak-db-password
 
         # ── Hostname / proxy ───────────────────────────────────────────────
+        # KC_HOSTNAME and KC_HOSTNAME_URL are mutually exclusive in Keycloak 24
+        {{- if .Values.config.hostnameUrl }}
+        - name: KC_HOSTNAME_URL
+          value: {{ .Values.config.hostnameUrl | quote }}
+        - name: KC_HOSTNAME_ADMIN_URL
+          value: {{ .Values.config.hostnameUrl | quote }}
+        {{- else }}
         - name: KC_HOSTNAME
           value: {{ .Values.config.hostname | quote }}
+        {{- end }}
         - name: KC_HTTP_ENABLED
           value: {{ .Values.config.httpEnabled | quote }}
         - name: KC_PROXY_HEADERS

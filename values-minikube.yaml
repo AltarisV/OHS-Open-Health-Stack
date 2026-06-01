@@ -59,20 +59,14 @@ eos:
     jvm:
       maxHeapSize: "1g"
 
-# ── Cohort Explorer (disabled until images are built locally) ──────────────
-# To enable:
-#   1. Clone and build into minikube's Docker daemon:
-#        eval $(minikube docker-env)
-#        git clone https://github.com/highmed/cohort-explorer-backend
-#        docker build -t cohort-explorer-backend:local cohort-explorer-backend/
-#        git clone https://github.com/highmed/cohort-explorer-frontend
-#        docker build --build-arg ENVIRONMENT=deploy \
-#          -t cohort-explorer-frontend:local cohort-explorer-frontend/
-#   2. Set postgres.numportal.enabled=true and add the required secret keys
-#   3. Flip enabled: true below
+# ── Cohort Explorer ───────────────────────────────────────────────────────────
+# Images must be built into minikube's Docker daemon before enabling:
+#   cd ~/cohort-builds && eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
+#   docker build -t cohort-explorer-backend:local cohort-explorer-backend/
+#   docker build --build-arg ENVIRONMENT=deploy -t cohort-explorer-frontend:local cohort-explorer-frontend/
 
 cohort-explorer-backend:
-  enabled: false
+  enabled: true
   replicaCount: 1
   image:
     repository: cohort-explorer-backend
@@ -92,11 +86,13 @@ cohort-explorer-backend:
   config:
     database:
       host: "postgres-cluster-rw"
+    keycloak:
+      url: "http://ohs-keycloak:8080/auth"   # /auth because KC_HOSTNAME_URL sets relative path
     ehrbase:
       restApiUrl: "http://ohs-ehrbase:8080/ehrbase/"
 
 cohort-explorer-frontend:
-  enabled: false
+  enabled: true
   replicaCount: 1
   image:
     repository: cohort-explorer-frontend
@@ -113,9 +109,16 @@ cohort-explorer-frontend:
     enabled: false
   readinessProbe:
     enabled: false
+  config:
+    api:
+      baseUrl: "http://localhost:8084/num-portal"
+    auth:
+      baseUrl: "http://localhost:8083/auth"
+      realm: "crr"
+      clientId: "num-portal-webapp"
 
 keycloak:
-  enabled: false
+  enabled: true
   replicaCount: 1
   resources:
     requests:
@@ -130,6 +133,8 @@ keycloak:
     enabled: false
   config:
     startMode: "start-dev"
+    hostname: "localhost"
+    hostnameUrl: "http://localhost:8083/auth"
     database:
       host: "postgres-cluster-rw"
       minHeapSize: "256m"

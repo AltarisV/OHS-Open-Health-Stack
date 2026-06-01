@@ -100,6 +100,13 @@ config:
     password: ""
     from: ""
 
+  # Attachment database (uses same postgres cluster, separate schema)
+  # Must be enabled for ProjectMapper to autowire AttachmentService
+  attachmentDatabase:
+    enabled: true
+    # Uses same host/port/name/username/password as config.database above
+    schema: "num-attachment"
+
   # Virus scanning (ClamAV – disable for dev; enable in production)
   virusScan:
     enabled: false

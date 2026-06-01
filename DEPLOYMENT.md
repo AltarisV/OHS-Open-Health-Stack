@@ -195,21 +195,25 @@ helm template ohs . -f values-prod.yaml | kubeval --strict
 ### Step 7: Deploy with Helm
 
 ```bash
+# IMPORTANT: Always package first — vocab/ is 4.4 GB and will OOM-kill helm if
+# you pass "." directly. Packaging uses .helmignore to exclude vocab/.
+helm package . -d /tmp/
+
 # Dry-run first (simulates deployment without applying changes)
-helm install ohs . \
+helm install ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml \
   --dry-run \
   --debug
 
 # If dry-run looks good, proceed with actual install
-helm install ohs . \
+helm install ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml
 
 # Optional Minikube/local install profile
 set -a; source .env; set +a
-helm upgrade --install ohs . \
+helm package . -d /tmp/ && helm upgrade --install ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values.yaml \
   --values values-minikube.yaml \
@@ -427,7 +431,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
   --namespace monitoring --create-namespace
 
 # Update OHS values to enable monitoring
-helm upgrade ohs . \
+helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml \
   --set monitoring.enabled=true
@@ -440,6 +444,32 @@ See Step 5 above for Sealed Secrets or External Secrets Operator setup.
 ---
 
 ## Troubleshooting
+
+### Problem: cohort-explorer-backend CrashLoopBackOff (`num-attachment` schema missing)
+
+`ProjectMapper` unconditionally requires `AttachmentService`, which in turn needs the
+`num-attachment` schema to exist in the `numportal` database. Flyway only creates tables,
+not schemas — so the schema must be created once manually after the postgres cluster is ready:
+
+```bash
+# Find the primary pod (not in recovery)
+for i in 1 2 3; do
+  PRIMARY=$(kubectl exec -n ohs postgres-cluster-$i -- psql -U postgres -d numportal \
+    -c 'SELECT pg_is_in_recovery();' 2>/dev/null | grep -c " f")
+  if [ "$PRIMARY" -gt 0 ]; then
+    kubectl exec -n ohs postgres-cluster-$i -- psql -U postgres -d numportal \
+      -c 'CREATE SCHEMA IF NOT EXISTS "num-attachment"; GRANT ALL ON SCHEMA "num-attachment" TO numportal;'
+    break
+  fi
+done
+```
+
+### Problem: cohort-explorer-frontend shows "authentication service" error
+
+The Angular production build loads `config.deploy.json`, not `config.json`. Both files
+are now mounted from the same ConfigMap — but if you built an older chart version, only
+`config.json` was mounted, leaving `config.deploy.json` with Azure DevOps placeholders
+(`#{auth_baseUrl}` etc.) which breaks OIDC init. Upgrade to the latest chart revision.
 
 ### Problem: Pods in CrashLoopBackOff
 
@@ -522,7 +552,7 @@ git pull origin main
 git checkout v0.2.0  # tag name
 
 # Helm upgrade
-helm upgrade ohs . \
+helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml
 
@@ -579,7 +609,7 @@ kubectl patch cloudnativepgcluster postgres-cluster -n ohs \
 
 ```bash
 # Update resource limits in values file and upgrade
-helm upgrade ohs . \
+helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml \
   --set ehrbase.resources.limits.cpu=4000m
