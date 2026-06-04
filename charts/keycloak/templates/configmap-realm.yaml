@@ -68,12 +68,12 @@ data:
           "username": "service-account-num-portal",
           "enabled": true,
           "serviceAccountClientId": "num-portal",
-          "clientRoleMappings": {
+          "clientRoles": {
             "realm-management": [
-              { "name": "view-users" },
-              { "name": "manage-users" },
-              { "name": "view-realm" },
-              { "name": "query-users" }
+              "view-users",
+              "manage-users",
+              "view-realm",
+              "query-users"
             ]
           }
         }

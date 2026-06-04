@@ -16,7 +16,7 @@
 | 9 | openEHRTool-v2 packaging (build Docker image from crs4/openEHRTool-v2) | PENDING |
 | 10 | EHRsuction -- data export tool | PENDING |
 | 11 | Data mirroring from BETTER Platform to EHRbase | PENDING |
-| 12 | Cohort Explorer (num-portal backend + Angular frontend) | IN PROGRESS |
+| 12 | Cohort Explorer (num-portal backend + Angular frontend) | COMPLETE |
 | 13 | CSV-to-openEHR bulk import | PENDING |
 | 14 | Production hardening (backups, TLS, monitoring, secrets rotation) | PENDING |
 
@@ -26,7 +26,7 @@
 2. **Production hardening** -- backups, HTTPS, monitoring before handling real patient data
 3. **openEHRTool-v2** -- needs custom Docker image built from upstream source (`packaging/openEHRTool-v2/`)
 4. **Data mirroring** -- BETTER Platform integration for multi-site data
-5. **Cohort Explorer + CSV import** -- analytics and data onboarding tooling
+5. **CSV import** -- remaining data onboarding tooling
 
 ## openEHRTool-v2 (Phase 9) -- Key Notes
 
@@ -40,7 +40,7 @@ docker push your-registry/opehrtool-v2:0.1.0
 # Re-enable the subchart in values.yaml and helm upgrade
 ```
 
-## Cohort Explorer (Phase 12) -- Key Notes
+## Cohort Explorer -- Deployment Notes
 
 No published Docker images. Build into minikube's Docker daemon for local dev:
 

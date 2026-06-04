@@ -73,9 +73,9 @@ config:
 livenessProbe:
   enabled: true
   httpGet:
-    path: /auth/health/live
+    path: /auth/realms/master/.well-known/openid-configuration
     port: 8080
-  initialDelaySeconds: 60
+  initialDelaySeconds: 180
   periodSeconds: 15
   timeoutSeconds: 5
   failureThreshold: 3
@@ -83,12 +83,21 @@ livenessProbe:
 readinessProbe:
   enabled: true
   httpGet:
-    path: /auth/health/ready
+    path: /auth/realms/master/.well-known/openid-configuration
     port: 8080
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 3
   failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /auth/realms/master/.well-known/openid-configuration
+    port: 8080
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 60
 
 podAnnotations: {}
 

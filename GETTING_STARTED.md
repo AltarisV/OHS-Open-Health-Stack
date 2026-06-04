@@ -2,8 +2,8 @@
 
 ## Choose Your Cluster Mode
 
-- Standard Kubernetes cluster: recommended default for home servers and shared clusters.
-- Optional Minikube local profile: useful for laptop-only/local testing.
+- Standard Kubernetes cluster: target deployment mode.
+- Optional Minikube local profile: local development override only.
 
 If you use Minikube, start it before the quick start flow:
 
@@ -58,7 +58,7 @@ kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
 kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
 ```
 
-If Cohort Explorer is enabled, add:
+Add the Cohort Explorer and Keycloak forwards:
 
 ```bash
 kubectl port-forward svc/ohs-keycloak 8083:8080 -n ohs
@@ -73,7 +73,7 @@ kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
 | openFHIR | http://localhost:8081/fhir/metadata | FHIR R4 |
 | Eos | http://localhost:8082/actuator/health | Spring Boot actuator |
 | Keycloak | http://localhost:8083/auth | Admin console: /auth/admin |
-| Cohort Explorer API | http://localhost:8084/ | Requires Keycloak enabled |
+| Cohort Explorer API | http://localhost:8084/ | Requires Keycloak |
 | Cohort Explorer UI | http://localhost:8085/ | Angular SPA |
 
 See [VERIFICATION.md](VERIFICATION.md) for end-to-end testing steps.
@@ -101,9 +101,9 @@ kubectl exec -it mongodb-cluster-0 -n ohs -- mongosh -u root -p YOUR_ROOT_PASS
 
 ---
 
-## Building Cohort Explorer (Phase 12, Optional)
+## Building and Enabling Cohort Explorer
 
-No published Docker images exist upstream — they must be built from source.
+No published Docker images exist upstream, so build them from source before enabling the subcharts.
 
 ```bash
 git clone https://github.com/highmed/cohort-explorer-backend

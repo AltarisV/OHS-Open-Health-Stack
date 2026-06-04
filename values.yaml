@@ -51,12 +51,12 @@ postgres:
 
   # Cohort Explorer Backend database (numportal schema, shared postgres-cluster)
   numportal:
-    enabled: false  # Set to true when deploying cohort-explorer-backend
+    enabled: true
     userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the numportal PostgreSQL role
 
   # Keycloak database (shared postgres-cluster)
   keycloak:
-    enabled: false  # Set to true when deploying keycloak
+    enabled: true
     userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the keycloak PostgreSQL role
 
   # Backup (disabled by default; configure destinationPath for production)
@@ -242,21 +242,20 @@ eos:
 
 # ========== COHORT EXPLORER ==========
 # Cohort Explorer is a web app to explore/visualize cohorts via openEHR.
-# Prerequisites before enabling:
-#   1. Deploy Keycloak (see keycloak section below) – realm "crr", client "num-portal"/"num-portal-webapp"
-#   2. Build & push Docker images (no public registry yet):
+# Base profile enables it as part of the standard stack.
+# Before installing, make sure the image locations and external URLs below match your environment:
+#   1. Build & push Docker images:
 #        git clone https://github.com/highmed/cohort-explorer-backend && cd cohort-explorer-backend
 #        docker build -t <your-registry>/cohort-explorer-backend:develop .
 #        git clone https://github.com/highmed/cohort-explorer-frontend && cd cohort-explorer-frontend
 #        docker build --build-arg ENVIRONMENT=deploy -t <your-registry>/cohort-explorer-frontend:develop .
-#   3. Set postgres.numportal.enabled=true (adds numportal DB to the shared postgres cluster)
-#   4. Add secrets to ohs-credentials:
+#   2. Add secrets to ohs-credentials:
 #        numportal-db-password, numportal-keycloak-secret, numportal-pseudonymity-secret,
-#        ehrbase-admin-password
+#        ehrbase-admin-password, keycloak-admin-password, keycloak-db-password
 
 # Cohort Explorer – Backend (Spring Boot, port 8090)
 cohort-explorer-backend:
-  enabled: false  # CHANGE_ME: set to true when ready
+  enabled: true
   replicaCount: 1
   image:
     repository: "ghcr.io/highmed/cohort-explorer-backend"  # CHANGE_ME: your registry/image
@@ -283,7 +282,7 @@ cohort-explorer-backend:
 
   config:
     database:
-      host: "postgres-cluster.ohs.svc.cluster.local"  # CHANGE_ME: update namespace
+      host: "postgres-cluster-rw.ohs.svc.cluster.local"
       port: 5432
       name: "numportal"
       schema: "num"
@@ -291,7 +290,7 @@ cohort-explorer-backend:
       password: "CHANGE_ME"  # overridden by ohs-credentials secret
 
     keycloak:
-      url: "http://keycloak.ohs.svc.cluster.local:8080"  # CHANGE_ME: your Keycloak URL
+      url: "http://ohs-keycloak.ohs.svc.cluster.local:8080/auth"
       realm: "crr"
       clientId: "num-portal"
       clientSecret: "CHANGE_ME"  # overridden by ohs-credentials secret
@@ -335,7 +334,7 @@ cohort-explorer-backend:
 
 # Cohort Explorer – Frontend (Angular/nginx, port 80)
 cohort-explorer-frontend:
-  enabled: false  # CHANGE_ME: set to true when ready
+  enabled: true
   replicaCount: 1
   image:
     repository: "ghcr.io/highmed/cohort-explorer-frontend"  # CHANGE_ME: your registry/image
@@ -383,15 +382,12 @@ cohort-explorer-frontend:
       en: ""
 
 # ========== KEYCLOAK ==========
-# Identity and Access Management – required by Cohort Explorer.
-# Uses the shared postgres-cluster; set postgres.keycloak.enabled=true alongside this.
-# After first deploy, access the admin console and set up:
-#   Realm:   crr
-#   Clients: num-portal (confidential), num-portal-webapp (public)
+# Identity and Access Management for the standard OHS deployment.
+# Uses the shared postgres-cluster and imports the `crr` realm on first startup.
 # Add to ohs-credentials: keycloak-admin-password, keycloak-db-password
 
 keycloak:
-  enabled: false  # CHANGE_ME: set to true when deploying Cohort Explorer
+  enabled: true
   replicaCount: 1
   image:
     repository: "quay.io/keycloak/keycloak"
@@ -417,7 +413,7 @@ keycloak:
       memory: "1Gi"
 
   config:
-    startMode: "start-dev"  # CHANGE_ME: use "start" in production
+    startMode: "start"
     adminUser: "admin"
     adminPassword: "CHANGE_ME"  # overridden by ohs-credentials secret
 
@@ -428,8 +424,9 @@ keycloak:
       username: "keycloak"
       password: "CHANGE_ME"  # overridden by ohs-credentials secret
 
-    hostname: "localhost"          # CHANGE_ME: external hostname without path
-    httpEnabled: true              # false in production
+    hostname: "ohs.example.org"   # CHANGE_ME: external hostname without path
+    hostnameUrl: "https://ohs.example.org/auth"  # CHANGE_ME: external Keycloak URL
+    httpEnabled: true              # set false when terminating TLS directly at Keycloak
     proxyHeaders: "xforwarded"
 
 # ========== NETWORKING & INGRESS ==========
@@ -456,13 +453,12 @@ ingress:
         - path: "/eos"
           pathType: "Prefix"
           service: "eos"
-        # Cohort Explorer paths – uncomment when cohort-explorer-backend/frontend are enabled
-        # - path: "/num-portal"
-        #   pathType: "Prefix"
-        #   service: "ohs-cohort-explorer-backend"
-        # - path: "/cohort-explorer"
-        #   pathType: "Prefix"
-        #   service: "ohs-cohort-explorer-frontend"
+        - path: "/num-portal"
+          pathType: "Prefix"
+          service: "ohs-cohort-explorer-backend"
+        - path: "/cohort-explorer"
+          pathType: "Prefix"
+          service: "ohs-cohort-explorer-frontend"
 
 # ========== MONITORING & LOGGING (OPTIONAL) ==========
 

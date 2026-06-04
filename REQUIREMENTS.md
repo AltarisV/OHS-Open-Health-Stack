@@ -15,7 +15,7 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 | 3 | Eos | ETL from openEHR to OMOP CDM | Active |
 | 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Disabled — needs custom image |
 | 5 | EHRsuction | Data export tool | Placeholder |
-| 6 | Cohort Explorer | OMOP CDM query UI | Placeholder |
+| 6 | Cohort Explorer | OMOP CDM query UI | Required component |
 | 7 | CSV-to-openEHR | Bulk import from CSV | Placeholder |
 | 8 | BETTER Platform | External EHR at Charité | External reference |
 | 9 | Bridgehead | Federated data exchange | External reference |
@@ -48,7 +48,7 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 ## Out of Scope (Future Phases)
 
 - Automated data mirroring from BETTER Platform
-- Cohort Explorer, CSV import, EHRsuction implementations
+- CSV import and EHRsuction implementations
 - Multi-tenancy and federated learning
 - Service mesh integration (Istio/Linkerd)
 

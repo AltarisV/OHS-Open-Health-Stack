@@ -6,7 +6,7 @@ OHS is a Kubernetes-native platform combining:
 - **EHRbase** — openEHR EHR storage (ISO 13606)
 - **openFHIR** — FHIR R4 API and openEHR bridge
 - **Eos** — ETL from openEHR to OMOP CDM for research analytics
-- Placeholder subcharts for future components (openEHRTool-v2, EHRsuction, Cohort Explorer, CSV import)
+- Additional stack components that are staged in the base profile until their deployment path is finalized (Cohort Explorer, openEHRTool-v2, EHRsuction, CSV import)
 
 ## Component Diagram
 
@@ -69,7 +69,7 @@ ohs/
     ├── ehrbase/            # EHR store
     ├── openfhir/           # FHIR API
     ├── eos/                # OMOP ETL
-    └── [placeholders]      # opehrtool-v2, ehrsuction, kohortenexplorer, csv-to-openeehr, better-platform
+     └── [staged charts]     # opehrtool-v2, ehrsuction, kohortenexplorer, csv-to-openeehr, better-platform
 ```
 
 ## Service Ports
@@ -89,7 +89,7 @@ ohs/
 | Database operators | CloudNativePG + MongoDB Community Operator | HA, automated backups, operator pattern is Kubernetes-native |
 | Packaging | Umbrella Helm chart | Single deploy command for entire stack |
 | Custom images | Only openEHRTool-v2 (no upstream image) | All other components have published images |
-| Placeholder subcharts | Disabled, architecture reserved | Documents integration points without requiring implementation |
+| Staged subcharts | Base profile keeps some components off until image and config paths are finalized | Preserves a runnable default while the target state remains the full stack |
 | Secret management | External to chart (kubectl / Sealed Secrets / ESO) | Secrets never committed to Git |
 
 ## Security

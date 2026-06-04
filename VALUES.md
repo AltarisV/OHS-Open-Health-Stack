@@ -598,18 +598,14 @@ helm upgrade ohs . -f values.yaml
 
 ## Placeholder Components
 
-### Disabled-by-Default Subcharts
+### Remaining Staged Components
 
-The following components are defined as placeholders (`enabled: false`) to document architecture. Enable when implementation is ready.
+The following components are still staged and remain `enabled: false` in the base profile.
 
 ```yaml
 ehrsuction:
   enabled: false                    # EHRsuction - Data export tool
                                     # Implementation pending
-
-kohortenexplorer:
-  enabled: false                    # Cohort Explorer - OMOP query UI
-                                    # Exact tech stack TBD
 
 csv-to-openeehr:
   enabled: false                    # CSV to openEHR - Bulk import

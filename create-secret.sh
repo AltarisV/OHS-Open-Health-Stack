@@ -19,9 +19,20 @@ kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=redis-password="${REDIS_PASSWORD}" \
   --from-literal=openfhir-mongo-uri="mongodb://openfhir:${OPENFHIR_MONGO_PASSWORD}@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster" \
   --from-literal=keycloak-admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
-  --from-literal=keycloak-db-password="${KEYCLOAK_DB_PASSWORD}" \
-  --from-literal=numportal-db-password="${NUMPORTAL_DB_PASSWORD}" \
   --from-literal=numportal-keycloak-secret="${NUMPORTAL_KEYCLOAK_SECRET}" \
-  --from-literal=numportal-pseudonymity-secret="${NUMPORTAL_PSEUDONYMITY_SECRET}"
+  --from-literal=numportal-pseudonymity-secret="${NUMPORTAL_PSEUDONYMITY_SECRET}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-echo "Secret 'ohs-credentials' created in namespace 'ohs'."
+kubectl create secret generic postgres-keycloak-user-secret -n ohs \
+  --type=kubernetes.io/basic-auth \
+  --from-literal=username="keycloak" \
+  --from-literal=password="${KEYCLOAK_DB_PASSWORD}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret generic postgres-numportal-user-secret -n ohs \
+  --type=kubernetes.io/basic-auth \
+  --from-literal=username="numportal" \
+  --from-literal=password="${NUMPORTAL_DB_PASSWORD}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+echo "Secrets applied in namespace 'ohs'."

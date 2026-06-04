@@ -4,6 +4,12 @@
 ingress:
   enabled: false
 
+postgres:
+  numportal:
+    enabled: true
+  keycloak:
+    enabled: true
+
 ehrbase:
   replicaCount: 1
   resources:
@@ -60,7 +66,8 @@ eos:
       maxHeapSize: "1g"
 
 # ── Cohort Explorer ───────────────────────────────────────────────────────────
-# Images must be built into minikube's Docker daemon before enabling:
+# Full local profile: Keycloak + Cohort Explorer are enabled here.
+# Images must be built into minikube's Docker daemon before installing/upgrading:
 #   cd ~/cohort-builds && eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
 #   docker build -t cohort-explorer-backend:local cohort-explorer-backend/
 #   docker build --build-arg ENVIRONMENT=deploy -t cohort-explorer-frontend:local cohort-explorer-frontend/
@@ -130,7 +137,22 @@ keycloak:
   livenessProbe:
     enabled: false
   readinessProbe:
-    enabled: false
+    enabled: true
+    httpGet:
+      path: /auth/realms/master/.well-known/openid-configuration
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: /auth/realms/master/.well-known/openid-configuration
+      port: 8080
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
   config:
     startMode: "start-dev"
     hostname: "localhost"

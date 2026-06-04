@@ -25,6 +25,26 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.startupDependencies.keycloak.enabled }}
+      initContainers:
+      - name: wait-for-keycloak
+        image: {{ .Values.startupDependencies.keycloak.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          keycloak_ready_url="{{ .Values.config.keycloak.url }}/realms/{{ .Values.config.keycloak.realm }}/.well-known/openid-configuration"
+          deadline=$(($(date +%s) + {{ .Values.startupDependencies.keycloak.timeoutSeconds }}))
+          until wget -q -T 5 -O /dev/null "${keycloak_ready_url}"; do
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for Keycloak at ${keycloak_ready_url}" >&2
+              exit 1
+            fi
+            echo "Waiting for Keycloak at ${keycloak_ready_url}"
+            sleep {{ .Values.startupDependencies.keycloak.checkIntervalSeconds }}
+          done
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -47,8 +67,8 @@ spec:
         - name: SPRING_DATASOURCE_NUMPORTAL_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: ohs-credentials
-              key: numportal-db-password
+              name: postgres-numportal-user-secret
+              key: password
 
         # ── Keycloak / OAuth2 ──────────────────────────────────────────────
         - name: KEYCLOAK_URL
@@ -146,8 +166,8 @@ spec:
         - name: SPRING_DATASOURCE_NUMPORTALATTACHMENT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: ohs-credentials
-              key: numportal-db-password
+              name: postgres-numportal-user-secret
+              key: password
         - name: SPRING_FLYWAY_NUMPORTALATTACHMENT_LOCATIONS
           value: "classpath:db/migration/num-portal-attachment"
 

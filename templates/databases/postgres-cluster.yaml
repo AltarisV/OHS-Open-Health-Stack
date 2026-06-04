@@ -16,40 +16,6 @@ stringData:
   username: eos
   password: {{ .Values.postgres.eos.userPassword | default "eos" | quote }}
 {{- end }}
-{{- if .Values.postgres.numportal.enabled }}
----
-# Secret for numportal PostgreSQL role (used by CNPG managed roles)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-numportal-user-secret
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "1"
-    helm.sh/hook-delete-policy: before-hook-creation
-type: kubernetes.io/basic-auth
-stringData:
-  username: numportal
-  password: {{ .Values.postgres.numportal.userPassword | default "numportal" | quote }}
-{{- end }}
-{{- if .Values.postgres.keycloak.enabled }}
----
-# Secret for keycloak PostgreSQL role (used by CNPG managed roles)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-keycloak-user-secret
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "1"
-    helm.sh/hook-delete-policy: before-hook-creation
-type: kubernetes.io/basic-auth
-stringData:
-  username: keycloak
-  password: {{ .Values.postgres.keycloak.userPassword | default "keycloak" | quote }}
-{{- end }}
 ---
 # PostgreSQL Cluster for EHRbase
 {{- if .Values.postgres.ehrbase.enabled }}

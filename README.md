@@ -13,7 +13,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **CloudNativePG** | PostgreSQL operator | Active | v1.29.1 |
 | **MongoDB Community Operator** | MongoDB operator | Active | v0.13.0 |
 | **EHRsuction** | Data export tool | Placeholder |  |
-| **Cohort Explorer** | OMOP CDM query UI | Placeholder |  |
+| **Cohort Explorer** | OMOP CDM query UI | Active |  |
 | **CSV-to-openEHR** | Bulk import from CSV | Placeholder |  |
 | **BETTER Platform** | External EHR at Charité | Reference only |  |
 
@@ -23,8 +23,8 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide including operat
 
 You can deploy in either mode:
 
-- Standard Kubernetes cluster (recommended default for shared/home clusters)
-- Optional local Minikube profile for smaller testing
+- Standard Kubernetes cluster (target deployment model)
+- Optional local Minikube profile for local development only
 
 ```bash
 kubectl create namespace ohs && kubectl label namespace ohs name=ohs
@@ -82,3 +82,4 @@ ohs/
 - **Eos runs on port 8081** (not 8080) — probes and service targetPort are configured accordingly
 - **`helm upgrade` recreates the PostgreSQL cluster** (hook policy `before-hook-creation`) — all DB data is wiped; change this before production use
 - **openEHRTool-v2** has no published Docker image; build it from source in `packaging/openEHRTool-v2/`
+- **Cohort Explorer** and **Keycloak** are enabled in the base profile; set the image coordinates, domain, and secrets before installing on standard Kubernetes

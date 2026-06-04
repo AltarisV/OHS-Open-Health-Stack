@@ -147,3 +147,10 @@ securityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+startupDependencies:
+  keycloak:
+    enabled: true
+    image: busybox:1.36
+    timeoutSeconds: 600
+    checkIntervalSeconds: 5

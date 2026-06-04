@@ -61,8 +61,8 @@ spec:
         - name: KC_DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: ohs-credentials
-              key: keycloak-db-password
+              name: postgres-keycloak-user-secret
+              key: password
 
         # ── Hostname / proxy ───────────────────────────────────────────────
         # KC_HOSTNAME and KC_HOSTNAME_URL are mutually exclusive in Keycloak 24
@@ -88,6 +88,11 @@ spec:
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
           {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- if .Values.startupProbe.enabled }}
+        startupProbe:
+          {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
         {{- end }}
 
         resources:
