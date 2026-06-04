@@ -1,0 +1,12 @@
+apiVersion: v2
+name: openehrtool-backend
+description: openEHRTool-v2 FastAPI backend – EHRBase interaction API with Redis caching
+type: application
+version: 0.1.0
+appVersion: "master"
+home: https://github.com/crs4/openEHRTool-v2
+sources:
+  - https://github.com/crs4/openEHRTool-v2
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

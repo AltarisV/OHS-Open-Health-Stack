@@ -13,7 +13,7 @@
 | Phase | Title | Status |
 |-------|-------|--------|
 | 1-8 | Repository foundation, operators, core components, docs | COMPLETE |
-| 9 | openEHRTool-v2 packaging (build Docker image from crs4/openEHRTool-v2) | PENDING |
+| 9 | openEHRTool-v2 packaging (build Docker image from crs4/openEHRTool-v2) | COMPLETE |
 | 10 | EHRsuction -- data export tool | PENDING |
 | 11 | Data mirroring from BETTER Platform to EHRbase | PENDING |
 | 12 | Cohort Explorer (num-portal backend + Angular frontend) | COMPLETE |
@@ -24,21 +24,28 @@
 
 1. **Deploy and verify the core stack** (EHRbase + openFHIR + Eos) -- everything else depends on this
 2. **Production hardening** -- backups, HTTPS, monitoring before handling real patient data
-3. **openEHRTool-v2** -- needs custom Docker image built from upstream source (`packaging/openEHRTool-v2/`)
+3. **openEHRTool-v2** -- deployed; use `build-images.sh` to rebuild if upstream changes
 4. **Data mirroring** -- BETTER Platform integration for multi-site data
 5. **CSV import** -- remaining data onboarding tooling
 
-## openEHRTool-v2 (Phase 9) -- Key Notes
+## openEHRTool-v2 (Phase 9) -- Implemented
 
-No published Docker image exists upstream. Build steps:
+Three subcharts: `openehrtool-backend` (FastAPI, port 5000), `openehrtool-frontend` (Vue3/nginx, port 80), `openehrtool-redis` (Redis 7).
+
+No published Docker images upstream. Build via `build-images.sh` which clones, patches, and builds into the target Docker daemon:
 
 ```bash
-git clone https://github.com/crs4/openEHRTool-v2.git packaging/openEHRTool-v2/src
-# Write multi-stage Dockerfile: Node 22 (Vue build) + Python 3.11-slim (FastAPI runtime)
-docker build -t your-registry/opehrtool-v2:0.1.0 packaging/openEHRTool-v2/
-docker push your-registry/opehrtool-v2:0.1.0
-# Re-enable the subchart in values.yaml and helm upgrade
+# For minikube: build directly into minikube's daemon
+eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
+
+Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `create-secret.sh`).
+
+One required upstream patch is applied automatically by `build-images.sh`: `SECRET_KEY` in `backend-fastapi/app/config.py` is changed to read from `OPENEHRTOOL_SECRET_KEY` env var.
 
 ## Cohort Explorer -- Deployment Notes
 

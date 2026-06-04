@@ -241,18 +241,33 @@ done
 
 ---
 
-## Building openEHRTool-v2 (Optional)
+## Building openEHRTool-v2
 
-No published Docker image exists upstream. Build it manually:
+No published Docker images exist upstream. Use `build-images.sh` — it clones the upstream repo into a temp directory, applies required patches, builds the images, and cleans up. The repo is never stored in the workspace.
 
 ```bash
-git clone https://github.com/crs4/openEHRTool-v2.git packaging/openEHRTool-v2/src
-# Write multi-stage Dockerfile: Node 22 (Vue build) + Python 3.11-slim (FastAPI runtime)
-docker build -t your-registry/opehrtool-v2:0.1.0 packaging/openEHRTool-v2/
-docker push your-registry/opehrtool-v2:0.1.0
+# For a registry-based workflow (standard Kubernetes)
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry your-registry.example.org:5000 \
+    --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry your-registry.example.org:5000 \
+    --component openehrtool-frontend
 ```
 
-Then set `opehrtool-v2.enabled: true` and `image.repository/tag` in your values file.
+**Local development (minikube, no registry):** build directly into minikube's Docker daemon with `--skip-push`:
+
+```bash
+eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
+```
+
+`OPENEHRTOOL_BACKEND_HOSTNAME` is the ingress hostname used by the frontend to reach the backend API — it is baked into the Vue/Vite bundle at build time and must match your `openehrtool-backend.ingress.host` value.
+
+The three subcharts (`openehrtool-redis`, `openehrtool-backend`, `openehrtool-frontend`) are all enabled by default. Ensure the `openehrtool-jwt-secret` key is set in `ohs-credentials` (see [SECRETS.md](SECRETS.md)).
 
 ---
 

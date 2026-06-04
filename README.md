@@ -9,7 +9,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **EHRbase** | EHR storage (openEHR / ISO 13606) | Active | ehrbase/ehrbase:2.31.0 |
 | **openFHIR** | FHIR R4 server and openEHR bridge | Active | openfhir/openfhir:2.2.1 |
 | **Eos** | ETL from openEHR to OMOP CDM | Active | ghcr.io/SevKohler/Eos:latest |
-| **openEHRTool-v2** | Web UI for EHR editing (Vue3 + FastAPI) | Disabled — needs custom image |
+| **openEHRTool-v2** | Web UI for EHR editing (Vue3 + FastAPI) | Active | localhost:5000/openehrtool-backend:ohs |
 | **CloudNativePG** | PostgreSQL operator | Active | v1.29.1 |
 | **MongoDB Community Operator** | MongoDB operator | Active | v0.13.0 |
 | **EHRsuction** | Data export tool | Placeholder |  |
@@ -71,8 +71,7 @@ ohs/
 │   └── databases/
 │       ├── postgres-cluster.yaml # CloudNativePG Cluster CRD
 │       └── mongodb-cluster.yaml  # MongoDB Community CRD
-└── packaging/
-    └── openEHRTool-v2/           # Custom Docker image build
+└── build-images.sh               # Builds openEHRTool-v2 + Cohort Explorer images from source
 ```
 
 ## Key Notes
@@ -81,5 +80,5 @@ ohs/
 - **`ohs-credentials` secret** — copy `.env.example` → `.env`, fill in passwords, run `create-secret.sh`
 - **Eos runs on port 8081** (not 8080) — probes and service targetPort are configured accordingly
 - **`helm upgrade` recreates the PostgreSQL cluster** (hook policy `before-hook-creation`) — all DB data is wiped; change this before production use
-- **openEHRTool-v2** has no published Docker image; build it from source in `packaging/openEHRTool-v2/`
+- **openEHRTool-v2** has no published Docker image; use `build-images.sh` to build from source — see [GETTING_STARTED.md](GETTING_STARTED.md)
 - **Cohort Explorer** and **Keycloak** are enabled in the base profile; set the image coordinates, domain, and secrets before installing on standard Kubernetes

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: openehrtool-frontend
+description: openEHRTool-v2 Vue3/nginx frontend – EHRBase browser UI
+type: application
+version: 0.1.0
+appVersion: "master"
+home: https://github.com/crs4/openEHRTool-v2
+sources:
+  - https://github.com/crs4/openEHRTool-v2
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

@@ -1,0 +1,98 @@
+# openEHRTool Backend Helm Chart Values
+# FastAPI backend (port 5000) for openEHRTool-v2.
+#
+# IMAGE BUILD – no public image exists; must build and push yourself:
+#   git clone https://github.com/crs4/openEHRTool-v2
+#   cd openEHRTool-v2
+#
+#   REQUIRED patch before building (no env override in upstream code):
+#   In backend-fastapi/app/config.py, change:
+#     SECRET_KEY = "The Last of Us"
+#   to:
+#     SECRET_KEY = os.environ.get("OPENEHRTOOL_SECRET_KEY", "change-me-in-production")
+#   (also add 'import os' at top if not present)
+#
+#   Then build:
+#     docker build -t <your-registry>/openehrtool-backend:master ./backend-fastapi
+#     docker push <your-registry>/openehrtool-backend:master
+
+replicaCount: 1
+
+image:
+  # PIN_VERSION: no public registry; build from https://github.com/crs4/openEHRTool-v2/tree/master/backend-fastapi
+  repository: "ghcr.io/your-org/openehrtool-backend"  # CHANGE_ME: your registry/image
+  tag: "master"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  # Backend is accessed by the frontend via this hostname (must match VITE_BACKEND_HOSTNAME used at frontend image build time)
+  host: "backend.ohs.example.org"  # CHANGE_ME: e.g. backend.ohs.example.org or ohs.example.org with path routing
+  path: /
+  pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+config:
+  # EHRBase nodename – shown to users in the tool's UI, not used for HTTP routing
+  # (users supply the actual EHRBase URL at login time)
+  ehrbaseNodename: "local.ehrbase.org"
+
+  # Redis connection – must match the openehrtool-redis service name in the same namespace
+  redis:
+    hostname: "ohs-openehrtool-redis"  # CHANGE_ME: <release-name>-openehrtool-redis
+    port: 6379
+
+  # JWT secret key – MUST be set to a strong random value via ohs-credentials secret.
+  # Key name in ohs-credentials: openehrtool-jwt-secret
+  # Requires the one-line patch to backend-fastapi/app/config.py described above.
+  jwtSecretKey: "CHANGE_ME"  # overridden by ohs-credentials secret
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+affinity: {}
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /docs
+    port: 5000
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /docs
+    port: 5000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3

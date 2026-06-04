@@ -1,0 +1,12 @@
+apiVersion: v2
+name: openehrtool-redis
+description: Redis cache for openEHRTool-v2 (activity log + artefact ID caching)
+type: application
+version: 0.1.0
+appVersion: "7"
+home: https://github.com/crs4/openEHRTool-v2
+sources:
+  - https://github.com/crs4/openEHRTool-v2
+maintainers:
+  - name: Open Health Stack
+    email: your.email@example.org

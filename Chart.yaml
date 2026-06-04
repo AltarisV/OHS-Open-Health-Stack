@@ -57,4 +57,13 @@ dependencies:
   - name: keycloak
     version: "0.1.0"
     condition: keycloak.enabled
+  - name: openehrtool-redis
+    version: "0.1.0"
+    condition: openehrtool-redis.enabled
+  - name: openehrtool-backend
+    version: "0.1.0"
+    condition: openehrtool-backend.enabled
+  - name: openehrtool-frontend
+    version: "0.1.0"
+    condition: openehrtool-frontend.enabled
 

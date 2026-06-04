@@ -1,0 +1,81 @@
+# openEHRTool Frontend Helm Chart Values
+# Vue3/nginx SPA (port 80) for openEHRTool-v2.
+#
+# IMAGE BUILD – VITE_BACKEND_HOSTNAME is a build-time Docker ARG; the backend
+# hostname is baked into the JS bundle. You must rebuild the image whenever
+# the backend ingress hostname changes.
+#
+#   git clone https://github.com/crs4/openEHRTool-v2
+#   cd openEHRTool-v2
+#   docker build \
+#     --build-arg VITE_BACKEND_HOSTNAME=backend.ohs.example.org \
+#     -t <your-registry>/openehrtool-frontend:master \
+#     ./frontend-vue
+#   docker push <your-registry>/openehrtool-frontend:master
+#
+# VITE_BACKEND_HOSTNAME must match ingress.host in the openehrtool-backend chart.
+
+replicaCount: 1
+
+image:
+  # PIN_VERSION: no public registry; build from https://github.com/crs4/openEHRTool-v2/tree/master/frontend-vue
+  repository: "ghcr.io/your-org/openehrtool-frontend"  # CHANGE_ME: your registry/image
+  tag: "master"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  host: "openehrtool.ohs.example.org"  # CHANGE_ME: your frontend hostname
+  path: /
+  pathType: Prefix
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+affinity: {}
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3

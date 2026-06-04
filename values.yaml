@@ -429,6 +429,121 @@ keycloak:
     httpEnabled: true              # set false when terminating TLS directly at Keycloak
     proxyHeaders: "xforwarded"
 
+# ========== OPENEHRTOOL ==========
+# openEHRTool-v2: web UI for browsing EHRs, templates, compositions, and running AQL queries.
+# Source: https://github.com/crs4/openEHRTool-v2
+#
+# PRE-REQUISITES – no public container images exist; build and push yourself:
+#
+#   1. ONE-LINE REQUIRED PATCH to backend before building:
+#      In backend-fastapi/app/config.py, change:
+#        SECRET_KEY = "The Last of Us"
+#      to:
+#        SECRET_KEY = os.environ.get("OPENEHRTOOL_SECRET_KEY", "change-me-in-production")
+#      (add 'import os' at top of file if not already present)
+#
+#   2. Build backend:
+#        git clone https://github.com/crs4/openEHRTool-v2
+#        docker build -t <your-registry>/openehrtool-backend:master ./openEHRTool-v2/backend-fastapi
+#        docker push <your-registry>/openehrtool-backend:master
+#
+#   3. Build frontend (VITE_BACKEND_HOSTNAME is baked in at build time – must match backend ingress host):
+#        docker build \
+#          --build-arg VITE_BACKEND_HOSTNAME=<backend-ingress-host> \
+#          -t <your-registry>/openehrtool-frontend:master \
+#          ./openEHRTool-v2/frontend-vue
+#        docker push <your-registry>/openehrtool-frontend:master
+#
+#   4. Add secret to ohs-credentials:
+#        openehrtool-jwt-secret  (strong random string, min 32 chars)
+
+# openEHRTool – Redis cache (activity log + artefact ID caching)
+openehrtool-redis:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "redis"
+    tag: "7-alpine"
+    pullPolicy: "IfNotPresent"
+  service:
+    type: "ClusterIP"
+    port: 6379
+    targetPort: 6379
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+  config:
+    maxmemory: "64mb"
+    maxmemoryPolicy: "allkeys-lru"
+    save: ""
+
+# openEHRTool – Backend (FastAPI, port 5000)
+openehrtool-backend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "localhost:5000/openehrtool-backend"  # built via build-images.sh
+    tag: "ohs"
+    pullPolicy: "Always"
+  service:
+    type: "ClusterIP"
+    port: 5000
+    targetPort: 5000
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    # Must match VITE_BACKEND_HOSTNAME used when building the frontend image
+    host: "openehrtool"
+    path: /
+    pathType: "Prefix"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  config:
+    ehrbaseNodename: "local.ehrbase.org"  # display label; actual URL entered by users at login
+    redis:
+      hostname: "ohs-openehrtool-redis"
+      port: 6379
+    jwtSecretKey: "CHANGE_ME"  # overridden by ohs-credentials secret key: openehrtool-jwt-secret
+
+# openEHRTool – Frontend (Vue3/nginx, port 80)
+openehrtool-frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    # VITE_BACKEND_HOSTNAME must be set at image build time (see PRE-REQUISITES above).
+    # Rebuild the image if the backend ingress hostname changes.
+    repository: "localhost:5000/openehrtool-frontend"  # built via build-images.sh
+    tag: "ohs"
+    pullPolicy: "Always"
+  service:
+    type: "ClusterIP"
+    port: 80
+    targetPort: 80
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    host: "openehrtool"
+    path: /
+    pathType: "Prefix"
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
 # ========== NETWORKING & INGRESS ==========
 
 ingress:

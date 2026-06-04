@@ -11,7 +11,8 @@ The `ohs-credentials` secret must be created before `helm install`:
 | `ehrbase-admin-password` | EHRbase admin API password (used by cohort-explorer-backend) |
 | `openfhir-mongo-uri` | Full MongoDB connection string including password |
 | `eos-db-password` | PostgreSQL password for Eos |
-| `redis-password` | Redis password (required if openEHRTool-v2 is enabled) |
+| `redis-password` | Redis password (not currently used — openEHRTool-v2 Redis runs without auth) |
+| `openehrtool-jwt-secret` | JWT signing secret for openEHRTool-v2 FastAPI backend |
 | `keycloak-admin-password` | Keycloak admin console password |
 | `keycloak-db-password` | PostgreSQL password for Keycloak |
 | `numportal-db-password` | PostgreSQL password for the cohort-explorer-backend |

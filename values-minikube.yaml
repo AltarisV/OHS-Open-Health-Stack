@@ -72,6 +72,44 @@ eos:
 #   docker build -t cohort-explorer-backend:local cohort-explorer-backend/
 #   docker build --build-arg ENVIRONMENT=deploy -t cohort-explorer-frontend:local cohort-explorer-frontend/
 
+# ── openEHRTool ──────────────────────────────────────────────────────────────
+# Images must be built directly into minikube's Docker daemon before installing/upgrading:
+#   eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
+#   OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+#   OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
+
+openehrtool-redis:
+  enabled: true
+
+openehrtool-backend:
+  enabled: true
+  image:
+    repository: "localhost:5000/openehrtool-backend"
+    tag: "ohs"
+    pullPolicy: Never
+  ingress:
+    host: "openehrtool"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  config:
+    redis:
+      hostname: "ohs-openehrtool-redis"
+
+openehrtool-frontend:
+  enabled: true
+  image:
+    repository: "localhost:5000/openehrtool-frontend"
+    tag: "ohs"
+    pullPolicy: Never
+  ingress:
+    host: "openehrtool"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+
 cohort-explorer-backend:
   enabled: true
   replicaCount: 1

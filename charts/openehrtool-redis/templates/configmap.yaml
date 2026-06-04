@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openehrtool-redis.fullname" . }}-conf
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openehrtool-redis.labels" . | nindent 4 }}
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+    {{- if .Values.config.maxmemory }}
+    maxmemory {{ .Values.config.maxmemory }}
+    {{- end }}
+    {{- if .Values.config.maxmemoryPolicy }}
+    maxmemory-policy {{ .Values.config.maxmemoryPolicy }}
+    {{- end }}
+    {{- if eq .Values.config.save "" }}
+    save ""
+    {{- else if .Values.config.save }}
+    save {{ .Values.config.save }}
+    {{- end }}

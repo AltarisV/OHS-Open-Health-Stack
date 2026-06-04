@@ -21,6 +21,7 @@ kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=keycloak-admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
   --from-literal=numportal-keycloak-secret="${NUMPORTAL_KEYCLOAK_SECRET}" \
   --from-literal=numportal-pseudonymity-secret="${NUMPORTAL_PSEUDONYMITY_SECRET}" \
+  --from-literal=openehrtool-jwt-secret="${OPENEHRTOOL_JWT_SECRET:-change-me-in-production}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic postgres-keycloak-user-secret -n ohs \

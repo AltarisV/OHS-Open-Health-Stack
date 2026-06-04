@@ -13,7 +13,7 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 | 1 | EHRbase | openEHR EHR store (ISO 13606) | Active |
 | 2 | openFHIR / FHIRconnect | FHIR R4 API & openEHR bridge | Active |
 | 3 | Eos | ETL from openEHR to OMOP CDM | Active |
-| 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Disabled — needs custom image |
+| 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Active |
 | 5 | EHRsuction | Data export tool | Placeholder |
 | 6 | Cohort Explorer | OMOP CDM query UI | Required component |
 | 7 | CSV-to-openEHR | Bulk import from CSV | Placeholder |
@@ -25,7 +25,7 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 | # | Constraint | Implementation |
 |---|-----------|----------------|
 | 1 | No upstream modifications | All components deployed from official published images |
-| 2 | Assume images may not exist | Custom `Dockerfile` in `packaging/` for openEHRTool-v2 |
+| 2 | Assume images may not exist | `build-images.sh` clones, builds, and optionally pushes custom images for openEHRTool-v2 and Cohort Explorer |
 | 3 | Helm-only packaging | No custom controllers; CloudNativePG + MongoDB operators for state |
 | 4 | Single deploy command | Umbrella chart: `helm install ohs . -f values.yaml -n ohs` |
 | 5 | Components independently togglable | All templates wrapped in `if .Values.COMPONENT.enabled` |

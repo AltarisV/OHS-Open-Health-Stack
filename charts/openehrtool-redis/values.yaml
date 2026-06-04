@@ -1,0 +1,45 @@
+# openEHRTool Redis Helm Chart Values
+# Redis 7 used by openEHRTool-v2 backend for activity log and artefact ID caching.
+
+replicaCount: 1
+
+image:
+  repository: redis
+  tag: "7-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 6379
+  targetPort: 6379
+  annotations: {}
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Redis configuration (mirrors redis/redis.conf from the upstream repo)
+config:
+  # Limit memory usage and set eviction policy to avoid unbounded growth
+  maxmemory: "64mb"
+  maxmemoryPolicy: "allkeys-lru"
+  # Disable persistence – this is a cache, not a store
+  save: ""
+
+persistence:
+  enabled: false
+  storageClass: ""
+  size: 1Gi
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+affinity: {}

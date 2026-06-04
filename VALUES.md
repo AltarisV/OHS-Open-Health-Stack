@@ -505,94 +505,101 @@ eos:
 
 ## openEHRTool-v2
 
-### `opehrtool-v2`
+Deployed as three subcharts: `openehrtool-redis` (cache), `openehrtool-backend` (FastAPI), `openehrtool-frontend` (Vue3/nginx). All are enabled by default.
 
-Web-based EHR editor and visualization tool (custom Docker image, disabled by default).
+### `openehrtool-redis`
+
+Embedded Redis 7 cache for activity logs and artefact ID storage. No authentication, persistence disabled, max memory 64 MB (LRU).
 
 ```yaml
-opehrtool-v2:
-  enabled: boolean                  # Enable deployment
-                                    # Default: false (enable only after building custom image)
-  
-  replicaCount: integer             # Number of pods
-                                    # Default: 1
+openehrtool-redis:
+  enabled: boolean                  # Default: true
   
   image:
-    repository: string              # Docker image repository
-                                    # Default: "your-registry.example.org/opehrtool-v2"
-                                    # CHANGE_ME: update to your registry
-    
-    tag: string                     # Image tag (PIN_VERSION)
-                                    # Default: "PIN_VERSION"
-                                    # CHANGE_ME: build tag (e.g., "0.1.0", "latest")
-    
+    repository: string              # Default: "redis"
+    tag: string                     # Default: "7-alpine"
     pullPolicy: string              # Default: "IfNotPresent"
   
   service:
-    type: string                    # Default: "ClusterIP"
-    port: integer                   # Default: 8080
-    targetPort: integer
+    port: integer                   # Default: 6379
+```
+
+### `openehrtool-backend`
+
+FastAPI backend (Python 3.11). Communicates with EHRbase and Redis.
+
+```yaml
+openehrtool-backend:
+  enabled: boolean                  # Default: true
   
-  ingress:
-    enabled: boolean                # Default: false (enable when deploying)
-    path: string                    # Default: "/opehrtool-v2"
-    pathType: string
+  image:
+    repository: string              # Default: "localhost:5000/openehrtool-backend"
+                                    # CHANGE_ME: update to your registry
+    tag: string                     # Default: "ohs"
+    pullPolicy: string              # Default: "Always"
   
-  resources:
-    requests:
-      cpu: string                   # CHANGE_ME
-      memory: string                # CHANGE_ME
-    limits:
-      cpu: string
-      memory: string
-  
-  frontend:
-    port: integer                   # Vue 3 frontend port (internal)
-                                    # Default: 3000
-  
-  backend:
-    port: integer                   # FastAPI backend port
-                                    # Default: 8000
-    
-    ehrbaseUrl: string              # EHRbase API endpoint
-                                    # Default: "http://ehrbase.default.svc.cluster.local:8080"
-    
-    ehrbaseUsername: string         # EHRbase credentials
-    ehrbasePassword: string         # CHANGE_ME: inject via Secret
+  ehrbase:
+    nodename: string                # EHRbase service hostname
+                                    # Default: "ohs-ehrbase"
   
   redis:
-    host: string                    # Redis service host
-                                    # Default: "redis.default.svc.cluster.local"
-                                    # CHANGE_ME: if using external Redis or different namespace
-    
-    port: integer                   # Redis port
-                                    # Default: 6379
-    
-    password: string                # Redis password (if protected)
-                                    # Default: "" (no password)
-                                    # CHANGE_ME: add password if Redis requires auth
+    hostname: string                # Redis service hostname
+                                    # Default: "ohs-openehrtool-redis"
+    port: integer                   # Default: 6379
+  
+  ingress:
+    enabled: boolean                # Default: true
+    host: string                    # Ingress hostname for backend API
+                                    # Default: "openehrtool"
+                                    # Must match OPENEHRTOOL_BACKEND_HOSTNAME used at image build
+  
+  service:
+    port: integer                   # Default: 5000
 ```
 
-### Building & Deploying openEHRTool-v2
+### `openehrtool-frontend`
 
-See `packaging/openEHRTool-v2/README.md` for detailed build instructions.
+Vue3/Vite SPA served by nginx. The backend hostname is baked into the bundle at image build time via `OPENEHRTOOL_BACKEND_HOSTNAME`.
+
+```yaml
+openehrtool-frontend:
+  enabled: boolean                  # Default: true
+  
+  image:
+    repository: string              # Default: "localhost:5000/openehrtool-frontend"
+                                    # CHANGE_ME: update to your registry
+    tag: string                     # Default: "ohs"
+    pullPolicy: string              # Default: "Always"
+  
+  ingress:
+    enabled: boolean                # Default: true
+    host: string                    # Ingress hostname for the web UI
+                                    # Default: "openehrtool"
+  
+  service:
+    port: integer                   # Default: 80
+```
+
+### Building openEHRTool-v2 images
+
+No published Docker images exist upstream. Use `build-images.sh`:
 
 ```bash
-# Build custom image
-cd packaging/openEHRTool-v2
-docker build -t your-registry/opehrtool-v2:0.1.0 .
-docker push your-registry/opehrtool-v2:0.1.0
+# Standard (registry)
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-frontend
 
-# Update values.yaml
-opehrtool-v2:
-  enabled: true
-  image:
-    repository: "your-registry/opehrtool-v2"
-    tag: "0.1.0"
-
-# Deploy
-helm upgrade ohs . -f values.yaml
+# Minikube (no registry)
+eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
+
+Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_SECRET` in `.env` before running `create-secret.sh`).
 
 ---
 
