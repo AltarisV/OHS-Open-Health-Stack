@@ -9,6 +9,12 @@ postgres:
     enabled: true
   keycloak:
     enabled: true
+  ehrbase:
+    instances: 1
+
+mongodb:
+  openfhir:
+    replicas: 1
 
 ehrbase:
   replicaCount: 1
@@ -167,11 +173,11 @@ keycloak:
   replicaCount: 1
   resources:
     requests:
-      cpu: "250m"
-      memory: "512Mi"
-    limits:
       cpu: "500m"
-      memory: "768Mi"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
   livenessProbe:
     enabled: false
   readinessProbe:

@@ -1,24 +1,26 @@
 {{- if .Values.postgres.enabled }}
----
-# Secret for eos PostgreSQL role (used by CNPG managed roles)
+
+{{- /*
+  Secrets are intentionally NOT created in this template.
+
+  Required secrets must be created before installing/upgrading this chart,
+  e.g. via create-secret.sh:
+
+    - postgres-cluster-app
+    - postgres-eos-user-secret
+    - postgres-keycloak-user-secret
+    - postgres-numportal-user-secret
+
+  The CNPG Cluster resources below only reference those secrets.
+*/ -}}
+
+{{- $eosSharedCluster := and .Values.postgres.eos.enabled (.Values.postgres.eos.sharedCluster | default false) -}}
+{{- $hasSharedPostInitSQL := or $eosSharedCluster .Values.postgres.numportal.enabled .Values.postgres.keycloak.enabled -}}
+{{- $hasManagedRoles := $hasSharedPostInitSQL -}}
+
 {{- if .Values.postgres.ehrbase.enabled }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-eos-user-secret
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "1"
-    helm.sh/hook-delete-policy: before-hook-creation
-type: kubernetes.io/basic-auth
-stringData:
-  username: eos
-  password: {{ .Values.postgres.eos.userPassword | default "eos" | quote }}
-{{- end }}
 ---
-# PostgreSQL Cluster for EHRbase
-{{- if .Values.postgres.ehrbase.enabled }}
+# PostgreSQL Cluster for EHRbase and optional shared databases.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -28,20 +30,11 @@ metadata:
     app: postgres
     component: ehrbase-database
     release: {{ .Release.Name }}
-  annotations:
-    # Deploy after all other resources so the CloudNativePG operator CRD is registered
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "5"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
-  # Number of PostgreSQL instances (HA replicas)
   instances: {{ .Values.postgres.ehrbase.instances | default 3 }}
-  
-  # Primary update strategy
+
   primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
-  
-  # PostgreSQL version and image
-  # imageName is omitted; CNPG uses its operator-bundled default image
+
   postgresql:
     parameters:
       max_connections: "200"
@@ -54,49 +47,55 @@ spec:
       random_page_cost: "1.1"
       effective_io_concurrency: "200"
       work_mem: "1280kB"
-      # min_wal_size and max_wal_size intentionally omitted;
-      # defaults (80MB/1GB) work for any WAL volume size.
-  
-  # Bootstrap configuration (initial database setup)
+
   bootstrap:
     initdb:
       database: "ehrbase"
       owner: "ehrbase"
+      secret:
+        name: postgres-cluster-app
+
+      {{- if $hasSharedPostInitSQL }}
       postInitSQL:
-        # Cluster-level operations (run in postgres db as superuser)
-        # Create eos role and eos_omop database (separate DB for Eos OMOP bridge)
+        {{- if $eosSharedCluster }}
+        # EOS OMOP bridge database on the shared cluster.
+        # Password is reconciled later by CNPG managed.roles using postgres-eos-user-secret.
         - "CREATE ROLE eos WITH LOGIN;"
         - "CREATE DATABASE eos_omop OWNER eos;"
         - "GRANT ALL PRIVILEGES ON DATABASE eos_omop TO eos;"
+        {{- end }}
+
         {{- if .Values.postgres.numportal.enabled }}
-        # Create numportal role and database (for Cohort Explorer Backend)
+        # Cohort Explorer / NUM Portal database on the shared cluster.
+        # Password is reconciled later by CNPG managed.roles using postgres-numportal-user-secret.
         - "CREATE ROLE numportal WITH LOGIN;"
         - "CREATE DATABASE numportal OWNER numportal;"
         - "GRANT ALL PRIVILEGES ON DATABASE numportal TO numportal;"
         {{- end }}
+
         {{- if .Values.postgres.keycloak.enabled }}
-        # Create keycloak role and database (for Keycloak IAM)
+        # Keycloak database on the shared cluster.
+        # Password is reconciled later by CNPG managed.roles using postgres-keycloak-user-secret.
         - "CREATE ROLE keycloak WITH LOGIN;"
         - "CREATE DATABASE keycloak OWNER keycloak;"
         - "GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;"
         {{- end }}
+      {{- end }}
+
       postInitApplicationSQL:
-        # ehrbase database setup (run in ehrbase db as superuser)
+        # EHRbase database setup.
         - "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
         - "CREATE SCHEMA IF NOT EXISTS ehrbase;"
         - "GRANT USAGE ON SCHEMA ehrbase TO ehrbase;"
         - "ALTER DEFAULT PRIVILEGES IN SCHEMA ehrbase GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ehrbase;"
-  
-  # Storage configuration
+
   storage:
     size: {{ .Values.postgres.ehrbase.storage | default "10Gi" }}
-  
-  # WAL (Write-Ahead Log) storage
+
   walStorage:
     size: {{ .Values.postgres.ehrbase.walStorage | default "5Gi" }}
-  
+
   {{- if .Values.postgres.backup.enabled }}
-  # Backup configuration (set postgres.backup.enabled=true and configure destinationPath)
   backup:
     barmanObjectStore:
       destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
@@ -107,19 +106,21 @@ spec:
         compression: gzip
       recoveryWindowInDays: {{ .Values.postgres.backup.retentionDays | default 30 }}
   {{- end }}
-  
-  # Monitoring and observability
+
   monitoring:
     enablePodMonitor: {{ .Values.monitoring.enabled | default false }}
-  
-  # Managed roles (CNPG sets PostgreSQL role passwords from secrets)
+
+  {{- if $hasManagedRoles }}
   managed:
     roles:
+      {{- if $eosSharedCluster }}
       - name: eos
         ensure: present
         login: true
         passwordSecret:
           name: postgres-eos-user-secret
+      {{- end }}
+
       {{- if .Values.postgres.numportal.enabled }}
       - name: numportal
         ensure: present
@@ -127,6 +128,7 @@ spec:
         passwordSecret:
           name: postgres-numportal-user-secret
       {{- end }}
+
       {{- if .Values.postgres.keycloak.enabled }}
       - name: keycloak
         ensure: present
@@ -134,8 +136,8 @@ spec:
         passwordSecret:
           name: postgres-keycloak-user-secret
       {{- end }}
-  
-  # Resource requests and limits
+  {{- end }}
+
   resources:
     requests:
       memory: "512Mi"
@@ -143,13 +145,12 @@ spec:
     limits:
       memory: "1Gi"
       cpu: "500m"
-
 {{- end }}
 
-# PostgreSQL Cluster for Eos (OMOP CDM)
 {{- if .Values.postgres.eos.enabled }}
 {{- if not .Values.postgres.eos.sharedCluster }}
 ---
+# Dedicated PostgreSQL Cluster for EOS OMOP CDM.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -161,28 +162,32 @@ metadata:
     release: {{ .Release.Name }}
 spec:
   instances: {{ .Values.postgres.eos.instances | default 2 }}
-  primaryUpdateStrategy: {{ .Values.postgres.ehrbase.primaryUpdateStrategy | default "unsupervised" }}
-  
+
+  primaryUpdateStrategy: {{ .Values.postgres.eos.primaryUpdateStrategy | default "unsupervised" }}
+
   imageName: "ghcr.io/cloudnative-pg/postgresql:15"
+
   postgresql:
     parameters:
       max_connections: "300"
       shared_buffers: "512MB"
       effective_cache_size: "2GB"
       maintenance_work_mem: "128MB"
-  
+
   bootstrap:
     initdb:
       database: "eos_omop"
       owner: "eos"
+      secret:
+        name: postgres-eos-user-secret
       postInitApplicationSQL:
         - "CREATE SCHEMA IF NOT EXISTS eos_omop;"
         - "GRANT USAGE ON SCHEMA eos_omop TO eos;"
         - "ALTER DEFAULT PRIVILEGES IN SCHEMA eos_omop GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO eos;"
-  
+
   storage:
     size: {{ .Values.postgres.eos.storage | default "50Gi" }}
-  
+
   walStorage:
     size: {{ .Values.postgres.eos.walStorage | default "5Gi" }}
 
@@ -196,10 +201,10 @@ spec:
         compression: gzip
       recoveryWindowInDays: {{ .Values.postgres.backup.retentionDays | default 30 }}
   {{- end }}
-  
+
   monitoring:
     enablePodMonitor: {{ .Values.monitoring.enabled | default false }}
-  
+
   resources:
     requests:
       memory: "1Gi"
@@ -207,7 +212,6 @@ spec:
     limits:
       memory: "2Gi"
       cpu: "1000m"
-
 {{- end }}
 {{- end }}
 

@@ -1,7 +1,15 @@
 {{- if .Values.mongodb.enabled }}
----
-# MongoDB Replica Set for openFHIR
 {{- if .Values.mongodb.openfhir.enabled }}
+---
+# MongoDB Replica Set for openFHIR.
+#
+# Secrets are intentionally NOT created in this template.
+# Required secrets must be created before installing/upgrading this chart,
+# e.g. via create-secret.sh:
+#
+#   - mongodb-root-password
+#   - mongodb-openfhir-password
+#
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
@@ -11,32 +19,21 @@ metadata:
     app: mongodb
     component: openfhir-database
     release: {{ .Release.Name }}
-  annotations:
-    # Deploy after all other resources so the MongoDB Community Operator CRD is registered
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "5"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
-  # MongoDB version
-  version: "6.0.6"  # PIN_VERSION: check MongoDB Community Operator compatibility
-  
-  # Replica set members
+  version: "6.0.6"
+
   members: {{ .Values.mongodb.openfhir.replicas | default 3 }}
-  
-  # Type of MongoDB deployment
+
   type: ReplicaSet
-  
-  # Security context
+
   security:
     authentication:
       modes:
         - SCRAM
+      ignoreUnknownUsers: true
     tls:
-      enabled: false  # Enable TLS for production (requires cert-manager)
-      #certificateKeySecret:
-      #  name: mongodb-tls-cert
-  
-  # Administrative credentials
+      enabled: false
+
   users:
     - name: root
       db: admin
@@ -46,7 +43,7 @@ spec:
       roles:
         - name: root
           db: admin
-    
+
     - name: openfhir
       db: openfhir
       scramCredentialsSecretName: mongodb-openfhir-scram-credentials
@@ -55,9 +52,10 @@ spec:
       roles:
         - name: readWrite
           db: openfhir
-  
-  # StatefulSet overrides (only resources and storage — let the operator manage
-  # selectors, labels, serviceName, and replicas automatically)
+
+  # StatefulSet overrides.
+  # Let the MongoDB Community Operator manage selectors, labels,
+  # serviceName, and replicas automatically.
   statefulSet:
     spec:
       template:
@@ -66,12 +64,12 @@ spec:
             - name: mongod
               resources:
                 requests:
-                  cpu: "100m"
-                  memory: "512Mi"
+                  cpu: {{ .Values.mongodb.openfhir.resources.requests.cpu | default "100m" | quote }}
+                  memory: {{ .Values.mongodb.openfhir.resources.requests.memory | default "512Mi" | quote }}
                 limits:
-                  cpu: "500m"
-                  memory: "1Gi"
-      
+                  cpu: {{ .Values.mongodb.openfhir.resources.limits.cpu | default "500m" | quote }}
+                  memory: {{ .Values.mongodb.openfhir.resources.limits.memory | default "1Gi" | quote }}
+
       volumeClaimTemplates:
         - metadata:
             name: data-volume
@@ -80,40 +78,7 @@ spec:
               - ReadWriteOnce
             resources:
               requests:
-                storage: {{ .Values.mongodb.openfhir.storage | default "20Gi" }}
-  
-  # Monitoring (optional)
-  #prometheusPasswordSecretRef:
-  #  name: mongodb-prometheus-password
+                storage: {{ .Values.mongodb.openfhir.storage | default "20Gi" | quote }}
 
 {{- end }}
-
-# Create Kubernetes Secret for MongoDB root password
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mongodb-root-password
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: mongodb
-    release: {{ .Release.Name }}
-type: Opaque
-stringData:
-  password: {{ .Values.mongodb.openfhir.rootPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
-
-# Create Kubernetes Secret for openFHIR MongoDB user password
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mongodb-openfhir-password
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: mongodb
-    release: {{ .Release.Name }}
-type: Opaque
-stringData:
-  password: {{ .Values.mongodb.openfhir.userPassword | default "CHANGE_ME_SECURE_PASSWORD" }}
-
 {{- end }}
