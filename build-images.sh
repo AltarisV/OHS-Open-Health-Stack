@@ -6,7 +6,8 @@
 #   bash build-images.sh [--registry <host:port>] [--tag <tag>] [--skip-push] [--component <name>]
 #
 # Components: cohort-explorer-backend, cohort-explorer-frontend,
-#             openehrtool-backend, openehrtool-frontend
+#             openehrtool-backend, openehrtool-frontend,
+#             ehrsuction
 # Default: build all components.
 # Note: cohort-explorer-backend uses 'mvn spring-boot:build-image' (no Dockerfile).
 #       Requires JDK 17 + Maven on PATH.
@@ -113,6 +114,94 @@ if should_build "cohort-explorer-frontend"; then
 
   build_and_push "cohort-explorer-frontend" "$WORKDIR/cohort-explorer-frontend" \
     --build-arg ENVIRONMENT=deploy
+fi
+
+# ── ehrsuction ────────────────────────────────────────────────────────────────
+if should_build "ehrsuction"; then
+  echo "Cloning EHRsuction..."
+  git clone --depth 1 https://github.com/SevKohler/EHRsuction \
+    "$WORKDIR/EHRsuction"
+
+  EHRSUCTION_CLIENT="$WORKDIR/EHRsuction/EHRSuctionClient.py"
+
+  echo "Applying temporary EHRbase AQL compatibility patch to EHRsuction..."
+
+  python3 - <<PY
+from pathlib import Path
+
+p = Path("${EHRSUCTION_CLIENT}")
+s = p.read_text()
+
+# Safety patch in case the cloned upstream does not yet contain the COMPOSITION fix.
+s = s.replace("CONTAINS Composition c", "CONTAINS COMPOSITION c")
+
+old = '''            aql = (
+                "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "
+                "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
+            ).format(limit, offset)
+'''
+
+new = '''            if self.platform == Platforms.EHRBASE:
+                aql = (
+                    "SELECT e/ehr_id/value, c, c/context/start_time/value "
+                    "FROM EHR e CONTAINS COMPOSITION c "
+                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
+                ).format(limit, offset)
+            else:
+                aql = (
+                    "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "
+                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
+                ).format(limit, offset)
+'''
+
+if old in s:
+    s = s.replace(old, new, 1)
+elif "c/context/start_time/value" in s and "SELECT e/ehr_id/value, c, c/context/start_time/value" in s:
+    print("EHRbase ORDER BY patch already present.")
+else:
+    raise SystemExit(
+        "Could not apply EHRbase ORDER BY patch. "
+        "Upstream EHRSuctionClient.py changed; inspect request_canonical()."
+    )
+
+old_count = '''        response = self.session.post(
+            self.query_endpoint,
+            headers=self.headers,
+            json={"q": "SELECT COUNT(e) FROM EHR e"},
+            auth=self.auth,
+            verify=False  # This disables SSL verification
+        )
+'''
+
+new_count = '''        aql = (
+            "SELECT COUNT(e/ehr_id/value) FROM EHR e"
+            if self.platform == Platforms.EHRBASE
+            else "SELECT COUNT(e) FROM EHR e"
+        )
+        response = self.session.post(
+            self.query_endpoint,
+            headers=self.headers,
+            json={"q": aql},
+            auth=self.auth,
+            verify=False  # This disables SSL verification
+        )
+'''
+
+if old_count in s:
+    s = s.replace(old_count, new_count, 1)
+elif "SELECT COUNT(e/ehr_id/value) FROM EHR e" in s:
+    print("EHRbase COUNT(ehr_id) patch already present.")
+else:
+    raise SystemExit(
+        "Could not apply EHRbase COUNT(e) patch. "
+        "Upstream EHRSuctionClient.py changed; inspect count_ehrs()."
+    )
+
+p.write_text(s)
+PY
+
+  echo "EHRsuction patch applied."
+  build_and_push "ehrsuction" "$WORKDIR/EHRsuction"
 fi
 
 # ── openehrtool-backend ───────────────────────────────────────────────────────

@@ -1,0 +1,98 @@
+{{- if .Values.ehrsuction.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-ehrsuction
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ehrsuction
+    release: {{ .Release.Name }}
+spec:
+  schedule: {{ .Values.ehrsuction.schedule | default "0 3 * * *" | quote }}
+  suspend: {{ .Values.ehrsuction.suspend | default true }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.ehrsuction.backoffLimit | default 1 }}
+      template:
+        metadata:
+          labels:
+            app: ehrsuction
+            release: {{ .Release.Name }}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: ehrsuction
+              image: "{{ .Values.ehrsuction.image.repository }}:{{ .Values.ehrsuction.image.tag }}"
+              imagePullPolicy: {{ .Values.ehrsuction.image.pullPolicy | default "IfNotPresent" }}
+              env:
+                - name: EHRSUCTION_OUTPUT_FOLDER
+                  value: "/export/"
+
+                - name: EHRSUCTION_BASE_URL
+                  value: {{ .Values.ehrsuction.config.baseUrl | quote }}
+                - name: EHRSUCTION_PLATFORM
+                  value: {{ .Values.ehrsuction.config.platform | default "EHRBASE" | quote }}
+                - name: EHRSUCTION_EXPORT_TYPE
+                  value: {{ .Values.ehrsuction.config.exportType | default "CANONICAL" | quote }}
+                - name: EHRSUCTION_STEPS
+                  value: {{ .Values.ehrsuction.config.steps | default 5000 | quote }}
+                - name: EHRSUCTION_CMD_LOG_LEVEL
+                  value: {{ .Values.ehrsuction.config.logging.cmdLevel | default "info" | quote }}
+                - name: EHRSUCTION_FILE_LOG_LEVEL
+                  value: {{ .Values.ehrsuction.config.logging.fileLevel | default "debug" | quote }}
+
+                - name: EHRBASE_USERNAME
+                  value: {{ .Values.ehrsuction.auth.username | quote }}
+                - name: EHRBASE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.ehrsuction.auth.passwordSecret.name | quote }}
+                      key: {{ .Values.ehrsuction.auth.passwordSecret.key | quote }}
+
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mkdir -p /tmp/ehrsuction
+
+                  python3 - <<'PY'
+                  import os
+                  import yaml
+
+                  config = {
+                      "base_url": os.environ["EHRSUCTION_BASE_URL"],
+                      "output_folder": os.environ.get("EHRSUCTION_OUTPUT_FOLDER", "/export/"),
+                      "platform": os.environ.get("EHRSUCTION_PLATFORM", "EHRBASE"),
+                      "export_type": os.environ.get("EHRSUCTION_EXPORT_TYPE", "CANONICAL"),
+                      "steps": int(os.environ.get("EHRSUCTION_STEPS", "5000")),
+                      "auth": {
+                          "username": os.environ["EHRBASE_USERNAME"],
+                          "password": os.environ["EHRBASE_PASSWORD"],
+                      },
+                      "logging": {
+                          "cmd_level": os.environ.get("EHRSUCTION_CMD_LOG_LEVEL", "info"),
+                          "file_level": os.environ.get("EHRSUCTION_FILE_LOG_LEVEL", "debug"),
+                      },
+                  }
+
+                  with open("/tmp/ehrsuction/config.yaml", "w", encoding="utf-8") as f:
+                      yaml.safe_dump(config, f, sort_keys=False)
+                  PY
+
+                  cd /tmp/ehrsuction
+                  python3 /app/ehrsuction.py
+
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+
+          volumes:
+            - name: export
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-ehrsuction-export
+{{- end }}

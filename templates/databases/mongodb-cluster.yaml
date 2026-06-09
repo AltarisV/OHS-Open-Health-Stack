@@ -1,5 +1,10 @@
-{{- if .Values.mongodb.enabled }}
-{{- if .Values.mongodb.openfhir.enabled }}
+{{- $mongodb := .Values.mongodb | default dict -}}
+{{- $openfhir := $mongodb.openfhir | default dict -}}
+{{- $resources := $openfhir.resources | default dict -}}
+{{- $requests := $resources.requests | default dict -}}
+{{- $limits := $resources.limits | default dict -}}
+
+{{- if and ($mongodb.enabled | default false) ($openfhir.enabled | default false) }}
 ---
 # MongoDB Replica Set for openFHIR.
 #
@@ -22,7 +27,7 @@ metadata:
 spec:
   version: "6.0.6"
 
-  members: {{ .Values.mongodb.openfhir.replicas | default 3 }}
+  members: {{ $openfhir.replicas | default 3 }}
 
   type: ReplicaSet
 
@@ -64,11 +69,11 @@ spec:
             - name: mongod
               resources:
                 requests:
-                  cpu: {{ .Values.mongodb.openfhir.resources.requests.cpu | default "100m" | quote }}
-                  memory: {{ .Values.mongodb.openfhir.resources.requests.memory | default "512Mi" | quote }}
+                  cpu: {{ $requests.cpu | default "100m" | quote }}
+                  memory: {{ $requests.memory | default "512Mi" | quote }}
                 limits:
-                  cpu: {{ .Values.mongodb.openfhir.resources.limits.cpu | default "500m" | quote }}
-                  memory: {{ .Values.mongodb.openfhir.resources.limits.memory | default "1Gi" | quote }}
+                  cpu: {{ $limits.cpu | default "500m" | quote }}
+                  memory: {{ $limits.memory | default "1Gi" | quote }}
 
       volumeClaimTemplates:
         - metadata:
@@ -78,7 +83,6 @@ spec:
               - ReadWriteOnce
             resources:
               requests:
-                storage: {{ .Values.mongodb.openfhir.storage | default "20Gi" | quote }}
+                storage: {{ $openfhir.storage | default "20Gi" | quote }}
 
-{{- end }}
 {{- end }}

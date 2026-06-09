@@ -13,8 +13,18 @@ postgres:
     instances: 1
 
 mongodb:
+  enabled: true
   openfhir:
+    enabled: true
     replicas: 1
+    storage: "20Gi"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
 
 ehrbase:
   replicaCount: 1
@@ -70,6 +80,38 @@ eos:
       baseUrl: "http://ohs-ehrbase:8080"
     jvm:
       maxHeapSize: "1g"
+
+# ── EHRsuction ────────────────────────────────────────────────────────────────
+# Image must be built directly into minikube's Docker daemon before running:
+#   eval $(minikube docker-env)
+#   bash build-images.sh --registry localhost:5000 --component ehrsuction --skip-push
+ehrsuction:
+  enabled: true
+  image:
+    repository: "localhost:5000/ehrsuction"
+    tag: "ohs"
+    pullPolicy: Never
+  schedule: "0 3 * * *"
+  suspend: true
+  backoffLimit: 1
+  config:
+    baseUrl: "http://ohs-ehrbase:8080"
+    platform: "EHRBASE"
+    exportType: "CANONICAL"
+    steps: 5000
+    logging:
+      cmdLevel: "info"
+      fileLevel: "debug"
+  auth:
+    username: "ehrbase_user"
+    passwordSecret:
+      name: "ohs-credentials"
+      key: "ehrbase-user-password"
+  output:
+    persistence:
+      enabled: true
+      storage: "5Gi"
+      accessMode: ReadWriteOnce
 
 # ── Cohort Explorer ───────────────────────────────────────────────────────────
 # Full local profile: Keycloak + Cohort Explorer are enabled here.

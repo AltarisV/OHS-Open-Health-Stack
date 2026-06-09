@@ -1,0 +1,17 @@
+{{- if and .Values.ehrsuction.enabled .Values.ehrsuction.output.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-ehrsuction-export
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ehrsuction
+    release: {{ .Release.Name }}
+spec:
+  accessModes:
+    - {{ .Values.ehrsuction.output.persistence.accessMode | default "ReadWriteOnce" }}
+  resources:
+    requests:
+      storage: {{ .Values.ehrsuction.output.persistence.storage | default "5Gi" | quote }}
+{{- end }}
