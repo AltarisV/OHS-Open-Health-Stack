@@ -18,6 +18,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: {{ .Values.ehrsuction.backoffLimit | default 1 }}
+      ttlSecondsAfterFinished: 300
       template:
         metadata:
           labels:
