@@ -20,6 +20,11 @@ kind: MongoDBCommunity
 metadata:
   name: mongodb-cluster
   namespace: {{ .Release.Namespace }}
+  annotations:
+    # Prevent Helm from deleting this cluster on `helm uninstall`.
+    # Without this, the MongoDB operator cascades deletion to all pods and PVCs, wiping data.
+    # To fully remove the cluster, delete it manually: kubectl delete mongodbcommunity mongodb-cluster -n <ns>
+    helm.sh/resource-policy: keep
   labels:
     app: mongodb
     component: openfhir-database

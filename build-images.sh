@@ -77,33 +77,28 @@ should_build() {
 }
 
 # ── cohort-explorer-backend ───────────────────────────────────────────────────
-# No Dockerfile – uses Spring Boot Buildpacks via 'mvn spring-boot:build-image'.
-# Requires: JDK 17, Maven on PATH.
+# Uses a multi-stage Dockerfile (generated here) so the Maven build runs inside
+# a JDK 17 container — no host JDK or Maven required.
 if should_build "cohort-explorer-backend"; then
-  if ! command -v mvn &>/dev/null; then
-    echo "Error: 'mvn' not found. Install Maven + JDK 17 to build cohort-explorer-backend." >&2
-    exit 1
-  fi
   echo "Cloning cohort-explorer-backend..."
   git clone --depth 1 https://github.com/highmed/cohort-explorer-backend \
     "$WORKDIR/cohort-explorer-backend"
 
-  FULL_IMAGE="${REGISTRY}/cohort-explorer-backend:${TAG}"
-  echo "──────────────────────────────────────────"
-  echo "Building: $FULL_IMAGE  (spring-boot:build-image)"
-  pushd "$WORKDIR/cohort-explorer-backend" >/dev/null
-  mvn spring-boot:build-image \
-    -Dspring-boot.build-image.imageName="$FULL_IMAGE" \
-    -DskipTests
-  popd >/dev/null
+  # Generate a multi-stage Dockerfile: compile with JDK 17, run with JRE 17.
+  cat > "$WORKDIR/cohort-explorer-backend/Dockerfile" << 'DOCKEREOF'
+FROM maven:3.9-eclipse-temurin-17-alpine AS build
+WORKDIR /app
+COPY . .
+RUN mvn package -Dmaven.test.skip=true --no-transfer-progress
 
-  if [[ "$SKIP_PUSH" == false ]]; then
-    echo "Pushing:  $FULL_IMAGE"
-    docker push "$FULL_IMAGE"
-  else
-    echo "Skipping push (--skip-push)"
-  fi
-  echo ""
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8090
+ENTRYPOINT ["java", "-jar", "app.jar"]
+DOCKEREOF
+
+  build_and_push "cohort-explorer-backend" "$WORKDIR/cohort-explorer-backend"
 fi
 
 # ── cohort-explorer-frontend ──────────────────────────────────────────────────
@@ -111,6 +106,9 @@ if should_build "cohort-explorer-frontend"; then
   echo "Cloning cohort-explorer-frontend..."
   git clone --depth 1 https://github.com/highmed/cohort-explorer-frontend \
     "$WORKDIR/cohort-explorer-frontend"
+
+  # Upstream Dockerfile pins node:20.14-alpine; Angular CLI now requires >=20.19.
+  sed -i 's|node:20\.14-alpine|node:22-alpine|g' "$WORKDIR/cohort-explorer-frontend/Dockerfile"
 
   build_and_push "cohort-explorer-frontend" "$WORKDIR/cohort-explorer-frontend" \
     --build-arg ENVIRONMENT=deploy
@@ -126,79 +124,32 @@ if should_build "ehrsuction"; then
 
   echo "Applying temporary EHRbase AQL compatibility patch to EHRsuction..."
 
-  python3 - <<PY
-from pathlib import Path
+  # Patch 1: capitalise COMPOSITION keyword (idempotent).
+  sed -i 's/CONTAINS Composition c/CONTAINS COMPOSITION c/g' "$EHRSUCTION_CLIENT"
 
-p = Path("${EHRSUCTION_CLIENT}")
-s = p.read_text()
+  # Patch 2: add EHRbase-specific ORDER BY column to request_canonical().
+  if grep -q 'SELECT e/ehr_id/value, c, c/context/start_time/value' "$EHRSUCTION_CLIENT"; then
+    echo "  EHRbase ORDER BY patch already present."
+  else
+    perl -0777 -i -pe \
+      's{([ ]{12}aql = \(\n[ ]{16}"SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "\n[ ]{16}"ORDER BY c/context/start_time/value LIMIT \{\} OFFSET \{\}"\n[ ]{12}\)\.format\(limit, offset\)\n)}{            if self.platform == Platforms.EHRBASE:\n                aql = (\n                    "SELECT e/ehr_id/value, c, c/context/start_time/value "\n                    "FROM EHR e CONTAINS COMPOSITION c "\n                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"\n                ).format(limit, offset)\n            else:\n                aql = (\n                    "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "\n                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"\n                ).format(limit, offset)\n}' \
+      "$EHRSUCTION_CLIENT" \
+    || { echo "ERROR: Could not apply EHRbase ORDER BY patch — upstream changed; inspect request_canonical()." >&2; exit 1; }
+    grep -q 'SELECT e/ehr_id/value, c, c/context/start_time/value' "$EHRSUCTION_CLIENT" \
+      || { echo "ERROR: ORDER BY patch did not apply — pattern not found." >&2; exit 1; }
+  fi
 
-# Safety patch in case the cloned upstream does not yet contain the COMPOSITION fix.
-s = s.replace("CONTAINS Composition c", "CONTAINS COMPOSITION c")
-
-old = '''            aql = (
-                "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "
-                "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
-            ).format(limit, offset)
-'''
-
-new = '''            if self.platform == Platforms.EHRBASE:
-                aql = (
-                    "SELECT e/ehr_id/value, c, c/context/start_time/value "
-                    "FROM EHR e CONTAINS COMPOSITION c "
-                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
-                ).format(limit, offset)
-            else:
-                aql = (
-                    "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "
-                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"
-                ).format(limit, offset)
-'''
-
-if old in s:
-    s = s.replace(old, new, 1)
-elif "c/context/start_time/value" in s and "SELECT e/ehr_id/value, c, c/context/start_time/value" in s:
-    print("EHRbase ORDER BY patch already present.")
-else:
-    raise SystemExit(
-        "Could not apply EHRbase ORDER BY patch. "
-        "Upstream EHRSuctionClient.py changed; inspect request_canonical()."
-    )
-
-old_count = '''        response = self.session.post(
-            self.query_endpoint,
-            headers=self.headers,
-            json={"q": "SELECT COUNT(e) FROM EHR e"},
-            auth=self.auth,
-            verify=False  # This disables SSL verification
-        )
-'''
-
-new_count = '''        aql = (
-            "SELECT COUNT(e/ehr_id/value) FROM EHR e"
-            if self.platform == Platforms.EHRBASE
-            else "SELECT COUNT(e) FROM EHR e"
-        )
-        response = self.session.post(
-            self.query_endpoint,
-            headers=self.headers,
-            json={"q": aql},
-            auth=self.auth,
-            verify=False  # This disables SSL verification
-        )
-'''
-
-if old_count in s:
-    s = s.replace(old_count, new_count, 1)
-elif "SELECT COUNT(e/ehr_id/value) FROM EHR e" in s:
-    print("EHRbase COUNT(ehr_id) patch already present.")
-else:
-    raise SystemExit(
-        "Could not apply EHRbase COUNT(e) patch. "
-        "Upstream EHRSuctionClient.py changed; inspect count_ehrs()."
-    )
-
-p.write_text(s)
-PY
+  # Patch 3: use platform-aware AQL for count_ehrs().
+  if grep -q 'SELECT COUNT(e/ehr_id/value) FROM EHR e' "$EHRSUCTION_CLIENT"; then
+    echo "  EHRbase COUNT(ehr_id) patch already present."
+  else
+    perl -0777 -i -pe \
+      's{([ ]{8}response = self\.session\.post\(\n[ ]{12}self\.query_endpoint,\n[ ]{12}headers=self\.headers,\n[ ]{12}json=\{"q": "SELECT COUNT\(e\) FROM EHR e"\},\n[ ]{12}auth=self\.auth,\n[ ]{12}verify=False  # This disables SSL verification\n[ ]{8}\)\n)}{        aql = (\n            "SELECT COUNT(e/ehr_id/value) FROM EHR e"\n            if self.platform == Platforms.EHRBASE\n            else "SELECT COUNT(e) FROM EHR e"\n        )\n        response = self.session.post(\n            self.query_endpoint,\n            headers=self.headers,\n            json={"q": aql},\n            auth=self.auth,\n            verify=False  # This disables SSL verification\n        )\n}' \
+      "$EHRSUCTION_CLIENT" \
+    || { echo "ERROR: Could not apply EHRbase COUNT patch — upstream changed; inspect count_ehrs()." >&2; exit 1; }
+    grep -q 'SELECT COUNT(e/ehr_id/value) FROM EHR e' "$EHRSUCTION_CLIENT" \
+      || { echo "ERROR: COUNT patch did not apply — pattern not found." >&2; exit 1; }
+  fi
 
   echo "EHRsuction patch applied."
   build_and_push "ehrsuction" "$WORKDIR/EHRsuction"
@@ -239,7 +190,9 @@ if should_build "openehrtool-frontend"; then
     echo ""
     echo "Error: OPENEHRTOOL_BACKEND_HOSTNAME must be set to build the frontend image." >&2
     echo "  The backend hostname is baked into the Vue/Vite JS bundle at build time." >&2
-    echo "  Example:" >&2
+    echo "  Local dev (kubectl port-forward):" >&2
+    echo "    OPENEHRTOOL_BACKEND_HOSTNAME=localhost bash build-images.sh ..." >&2
+    echo "  Production:" >&2
     echo "    OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool-api.ohs.example.org bash build-images.sh ..." >&2
     echo ""
     exit 1

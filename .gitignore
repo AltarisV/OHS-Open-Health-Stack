@@ -56,6 +56,8 @@ env/
 # OS and shell
 *.sh.bak
 *.tmp
+skills-lock.json
+.agents/
 
 # Local development overrides
 values-local.yaml

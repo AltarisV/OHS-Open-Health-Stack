@@ -65,6 +65,57 @@ psql_exec() {
 
 # Stream a local CSV into the database via COPY FROM STDIN.
 # This never copies the file to the pod — data is piped through kubectl exec.
+post_load_steps() {
+  echo ""
+  echo "======================================================"
+  echo " Next Steps"
+  echo "======================================================"
+  echo ""
+  echo "1. Signal Helm that vocabularies are loaded:"
+  echo "   helm upgrade ohs . -n ${NAMESPACE} --reuse-values \\"
+  echo "     --set eos.config.omop.athenaVocabulariesPresent=true"
+  echo ""
+  echo "   Or edit values.yaml:"
+  echo "     eos:"
+  echo "       config:"
+  echo "         omop:"
+  echo "           athenaVocabulariesPresent: true"
+  echo "   Then: helm upgrade ohs . -n ${NAMESPACE} -f values.yaml"
+  echo ""
+
+  # Detect Eos deployment and check readiness
+  EOS_DEPLOY=$(kube get deployment -n "$NAMESPACE" -l app.kubernetes.io/name=eos \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+
+  if [[ -n "$EOS_DEPLOY" ]]; then
+    EOS_POD=$(kube get pods -n "$NAMESPACE" -l app.kubernetes.io/name=eos \
+      -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    EOS_READY=""
+    if [[ -n "$EOS_POD" ]]; then
+      EOS_READY=$(kube get pod -n "$NAMESPACE" "$EOS_POD" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
+    fi
+
+    if [[ "$EOS_READY" != "True" ]]; then
+      echo "2. Eos pod is not Ready — restarting to pick up loaded vocabularies ..."
+      kube rollout restart deployment "$EOS_DEPLOY" -n "$NAMESPACE" && \
+        echo "   Restarted. Monitor: $KUBECTL rollout status deployment/$EOS_DEPLOY -n $NAMESPACE" || \
+        echo "   Restart failed. Try: $KUBECTL delete pod -n $NAMESPACE $EOS_POD"
+    else
+      echo "2. Eos is running. Restart it if ETL is still failing:"
+      echo "   $KUBECTL rollout restart deployment/$EOS_DEPLOY -n $NAMESPACE"
+    fi
+  else
+    echo "2. Restart Eos to pick up loaded vocabularies:"
+    echo "   $KUBECTL rollout restart deployment -n $NAMESPACE -l app.kubernetes.io/name=eos"
+  fi
+
+  echo ""
+  echo "3. Optionally free disk space by removing local vocab CSVs:"
+  echo "   rm -rf ${VOCAB_DIR}"
+  echo ""
+}
+
 load_table() {
   local table="$1"
   local csv_file="$2"
@@ -162,7 +213,9 @@ TABLE_COUNT=$(psql_exec "$PRIMARY_POD" -t -c \
 
 if [[ "$TABLE_COUNT" != "1" ]]; then
   echo "ERROR: OMOP CDM tables not found in schema '${CDM_SCHEMA}' of database '${DB_NAME}'." >&2
-  echo "  The DDL setup may not have run.  Check the omop-ddl-setup Job in the Helm chart." >&2
+  echo "  Eos must be deployed and started at least once — Hibernate creates the tables on first boot." >&2
+  echo "  Check Eos pod:  $KUBECTL get pods -n $NAMESPACE -l app.kubernetes.io/name=eos" >&2
+  echo "  Check Eos logs: $KUBECTL logs -n $NAMESPACE -l app.kubernetes.io/name=eos --tail=50" >&2
   exit 1
 fi
 
@@ -176,12 +229,14 @@ DRUG_COUNT=$(psql_exec "$PRIMARY_POD" -t -c "
     ELSE '0' END;" 2>/dev/null | tr -d ' \n')
 
 if [[ "$DRUG_COUNT" =~ ^[0-9]+$ && "$DRUG_COUNT" -gt 0 ]]; then
-  echo "Vocabulary fully loaded (drug_strength: ${DRUG_COUNT} rows)."
   if [[ "${FORCE_RELOAD:-0}" != "1" ]]; then
-    echo "Skipping data load — tables already populated. Pass FORCE_RELOAD=1 to reload."
-    echo ""
+    echo "Vocabulary already fully loaded (drug_strength: ${DRUG_COUNT} rows)."
+    echo "Skipping data load. Pass FORCE_RELOAD=1 to reload all tables."
+    post_load_steps
+    exit 0
   else
-    echo "FORCE_RELOAD=1 set — will reload all tables ..."
+    echo "Vocabulary present (drug_strength: ${DRUG_COUNT} rows) — FORCE_RELOAD=1, reloading all tables ..."
+    echo ""
   fi
 fi
 
@@ -318,7 +373,7 @@ if [[ -n "$TMP_IDX" && -s "$TMP_IDX" ]]; then
   # that is not worth the cost in a development deployment.
   sed -i '/^CLUSTER /d' "$TMP_IDX"
 
-  echo " Creating indices (this runs CLUSTER on several large tables — may take minutes) ..."
+  echo " Creating indices (may take several minutes on large tables) ..."
   # Run with ON_ERROR_STOP=0 so already-existing indices don't abort the whole script.
   # Use -i to forward the local SQL file through stdin to psql inside the pod.
   kube exec -i -n "$NAMESPACE" "$PRIMARY_POD" -- \
@@ -331,7 +386,4 @@ echo ""
 echo "======================================================"
 echo " All done"
 echo "======================================================"
-echo ""
-echo "Next steps:"
-echo "  1. Optionally remove the local vocab/ CSVs to free disk space."
-echo "  2. The EOS application should now return data from its ETL endpoints."
+post_load_steps

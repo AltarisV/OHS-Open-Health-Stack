@@ -1,0 +1,77 @@
+{{- if and .Values.postgres.numportal.enabled (index .Values "cohort-explorer-backend" "enabled") }}
+---
+# One-time Job that creates the PostgreSQL schemas required by Cohort Explorer backend
+# inside the numportal database.  The database itself is created by CNPG postInitSQL,
+# but CNPG has no mechanism to run init SQL against a non-bootstrap database, so a
+# post-install Job is the correct place for this.
+#
+# Schemas created:
+#   num            — main application schema (Flyway migrations: db/migration/num-portal)
+#   num-attachment — attachment storage schema (Flyway migrations: db/migration/num-portal-attachment)
+#
+# The Job is idempotent (CREATE SCHEMA IF NOT EXISTS) and safe to re-run on every upgrade.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-numportal-schema-init
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-timeout: "600s"
+    # Delete the previous Job before creating a new one (keeps history clean).
+    # Succeeded Jobs are also removed; failed Jobs are kept for debugging.
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    app: numportal-schema-init
+    release: {{ .Release.Name }}
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: numportal-schema-init
+        release: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: schema-init
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  # numportal is the owner of the numportal database and can create schemas in it.
+                  name: postgres-numportal-user-secret
+                  key: password
+            - name: PG_HOST
+              value: "postgres-cluster-rw.{{ .Release.Namespace }}.svc.cluster.local"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "==> Waiting for PostgreSQL to accept connections..."
+              until pg_isready -h "$PG_HOST" -U numportal -q; do
+                sleep 3
+              done
+              echo "    PostgreSQL is ready."
+
+              echo "==> Waiting for numportal database to exist..."
+              until psql "postgresql://numportal@${PG_HOST}/numportal" \
+                -t -c "SELECT 1" | grep -q 1; do
+                echo "    numportal database not yet accessible — retrying in 5s..."
+                sleep 5
+              done
+              echo "    numportal database accessible."
+
+              echo "==> Creating schemas in numportal..."
+              psql "postgresql://numportal@${PG_HOST}/numportal" \
+                -c 'CREATE SCHEMA IF NOT EXISTS "num";' \
+                -c 'CREATE SCHEMA IF NOT EXISTS "num-attachment";'
+
+              echo "==> Schema init complete."
+{{- end }}

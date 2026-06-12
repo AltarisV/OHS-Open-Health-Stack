@@ -591,11 +591,9 @@ OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
   bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-frontend
 
-# Minikube (no registry)
-eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+# Local Docker Desktop (no registry — shares host daemon)
+bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
 

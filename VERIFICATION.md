@@ -10,8 +10,8 @@ For installation, operators, local image builds, and general setup, see [GETTING
 
 ```bash
 # Validate chart syntax and rendering
-helm lint . -f values.yaml -f values-minikube.yaml
-helm template ohs . -n ohs -f values-minikube.yaml > /dev/null
+helm lint . -f values.yaml -f values-local.yaml
+helm template ohs . -n ohs -f values-local.yaml > /dev/null
 
 # Check for unfilled placeholders
 grep -r "CHANGE_ME\|PIN_VERSION\|YOUR_" . --include="*.yaml" --include="*.yml"

@@ -35,13 +35,13 @@ Three subcharts: `openehrtool-backend` (FastAPI, port 5000), `openehrtool-fronte
 No published Docker images upstream. Build via `build-images.sh` which clones, patches, and builds into the target Docker daemon:
 
 ```bash
-# For minikube: build directly into minikube's daemon
-eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+# Local (Docker Desktop — shares host daemon, no eval step needed)
+bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
+
+`OPENEHRTOOL_BACKEND_HOSTNAME` is baked into the Vue bundle at build time. Use `localhost` for local port-forward access; use the ingress hostname for production.
 
 Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `create-secret.sh`).
 
@@ -49,17 +49,12 @@ One required upstream patch is applied automatically by `build-images.sh`: `SECR
 
 ## Cohort Explorer -- Deployment Notes
 
-No published Docker images. Build into minikube's Docker daemon for local dev:
+No published Docker images. Build via `build-images.sh` for local dev:
 
 ```bash
-eval $(minikube docker-env)
-
-git clone https://github.com/highmed/cohort-explorer-backend
-docker build -t cohort-explorer-backend:local cohort-explorer-backend/
-
-git clone https://github.com/highmed/cohort-explorer-frontend
-docker build --build-arg ENVIRONMENT=deploy \
-  -t cohort-explorer-frontend:local cohort-explorer-frontend/
+# Docker Desktop — shares host daemon, images are immediately visible to Kubernetes
+bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
+bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
 ```
 
 **Prerequisites** (beyond the core stack):

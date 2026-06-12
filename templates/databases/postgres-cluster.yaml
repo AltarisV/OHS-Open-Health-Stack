@@ -26,6 +26,11 @@ kind: Cluster
 metadata:
   name: postgres-cluster
   namespace: {{ .Release.Namespace }}
+  annotations:
+    # Prevent Helm from deleting this cluster on `helm uninstall`.
+    # Without this, CNPG cascades the deletion to all pods and PVCs, wiping data.
+    # To fully remove the cluster, delete it manually: kubectl delete cluster postgres-cluster -n <ns>
+    helm.sh/resource-policy: keep
   labels:
     app: postgres
     component: ehrbase-database
@@ -156,6 +161,8 @@ kind: Cluster
 metadata:
   name: postgres-eos-cluster
   namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
   labels:
     app: postgres
     component: eos-database

@@ -20,7 +20,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 
 ## Quick Start
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Minikube setup.
+See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Docker Desktop setup.
 
 Standard Kubernetes deployment:
 
@@ -38,19 +38,17 @@ helm upgrade --install ohs . -n ohs -f values.yaml
 kubectl get pods -n ohs -w
 ```
 
-Optional Minikube local deployment:
+Optional local deployment (Docker Desktop Kubernetes):
 
 ```bash
-minikube start --driver=docker
-
-eval $(minikube docker-env)
-
 # Build local images required by components without published images.
-bash build-images.sh --registry localhost:5000 --skip-push
+# Docker Desktop shares the host Docker daemon — no eval step needed.
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
+  bash build-images.sh --registry localhost:5000 --skip-push
 
 bash create-secret.sh
 
-helm upgrade --install ohs . -n ohs -f values-minikube.yaml
+helm upgrade --install ohs . -n ohs -f values.yaml -f values-local.yaml --timeout 15m
 
 kubectl get pods -n ohs -w
 ```
@@ -74,7 +72,7 @@ kubectl get pods -n ohs -w
 ohs/
 ├── Chart.yaml                    # Umbrella chart
 ├── values.yaml                   # Base configuration
-├── values-minikube.yaml          # Local Minikube overrides
+├── values-local.yaml             # Local Docker Desktop overrides
 ├── create-secret.sh              # Creates required Kubernetes secrets from .env
 ├── build-images.sh               # Builds self-hosted component images from source
 ├── charts/                       # Subcharts
@@ -98,10 +96,11 @@ ohs/
 Some components are built from upstream source repositories because no suitable published deployment image is available or because the image must be configured for this stack.
 
 ```bash
-eval $(minikube docker-env)
+# Docker Desktop shares the host Docker daemon — no eval step needed.
 
 # Build all supported local images.
-bash build-images.sh --registry localhost:5000 --skip-push
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
+  bash build-images.sh --registry localhost:5000 --skip-push
 
 # Build individual components.
 bash build-images.sh --registry localhost:5000 --component ehrsuction --skip-push
@@ -109,7 +108,9 @@ bash build-images.sh --registry localhost:5000 --component cohort-explorer-backe
 bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
 bash build-images.sh --registry localhost:5000 --component openehrtool-backend --skip-push
 
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+# OPENEHRTOOL_BACKEND_HOSTNAME is baked into the Vue bundle at build time.
+# Use 'localhost' for local access via kubectl port-forward.
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --component openehrtool-frontend --skip-push
 ```
 
@@ -134,7 +135,7 @@ Exported files are written to the `ohs-ehrsuction-export` PVC.
 
 * **Operators must be pre-installed**: CloudNativePG and MongoDB Community Operator are required before installing the chart.
 * **Secrets are externalized**: copy `.env.example` to `.env`, fill in values, and run `create-secret.sh`.
-* **Local Minikube uses `values-minikube.yaml`**: this profile reduces database replicas, disables selected probes, and uses locally built images.
+* **Local Docker Desktop uses `values-local.yaml`**: this profile reduces database replicas, disables selected probes, and uses locally built images.
 * **Eos runs on port `8081`**: probes and service `targetPort` are configured accordingly.
 * **EHRsuction runs as a CronJob**: exports are written to a persistent volume and can be triggered manually or by schedule.
 * **openEHRTool-v2, EHRsuction and Cohort Explorer require local/self-hosted image builds**: use `build-images.sh`.

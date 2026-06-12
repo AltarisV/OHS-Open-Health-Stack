@@ -75,8 +75,8 @@ cd /path/to/ohs-open-health-stack
 cp values.yaml values-prod.yaml
 # Or for development:
 cp values.yaml values-dev.yaml
-# Optional local Minikube profile (already provided in this repo):
-cp values-minikube.yaml values-minikube.local.yaml
+# Optional local Docker Desktop profile (already provided in this repo):
+cp values-local.yaml values-local.override.yaml
 ```
 
 **Edit your custom values file** with your environment details:
@@ -211,13 +211,12 @@ helm install ohs /tmp/ohs-0.1.0.tgz \
   --namespace ohs \
   --values values-prod.yaml
 
-# Optional Minikube/local install profile
-set -a; source .env; set +a
-helm package . -d /tmp/ && helm upgrade --install ohs /tmp/ohs-0.1.0.tgz \
+# Optional local Docker Desktop install profile
+helm upgrade --install ohs . \
   --namespace ohs \
   --values values.yaml \
-  --values values-minikube.yaml \
-  --set-string mongodb.openfhir.userPassword="$OPENFHIR_MONGO_PASSWORD"
+  --values values-local.yaml \
+  --timeout 15m
 
 # Monitor installation progress
 watch kubectl get pods -n ohs
@@ -619,15 +618,30 @@ helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz \
 
 ## Uninstallation
 
+> **Data safety:** The PostgreSQL and MongoDB cluster resources are annotated with
+> `helm.sh/resource-policy: keep`. This means `helm uninstall` intentionally does **not**
+> delete those clusters or their PVCs — your data survives the Helm release removal.
+> Delete the clusters manually only when you are sure you no longer need the data.
+
 ```bash
-# Remove OHS release
+# Remove OHS Helm release (databases are kept — see note above)
 helm uninstall ohs -n ohs
 
-# Delete namespace (if created earlier)
-kubectl delete namespace ohs
+# Optional: delete the database clusters and their PVCs (IRREVERSIBLE — backup first)
+kubectl delete cluster postgres-cluster postgres-eos-cluster -n ohs
+kubectl delete mongodbcommunity mongodb-cluster -n ohs
+kubectl delete pvc -n ohs -l cnpg.io/cluster=postgres-cluster
+kubectl delete pvc -n ohs -l cnpg.io/cluster=postgres-eos-cluster
 
-# WARNING: This will also delete persistent data. Ensure backups exist before deleting.
+# Optional: delete the namespace entirely
+kubectl delete namespace ohs
 ```
+
+> **Reinstalling after uninstall:** Because the database clusters are kept, use
+> `helm upgrade --install` instead of `helm install` to avoid "already exists" errors:
+> ```bash
+> helm package . -d /tmp/ && helm upgrade --install ohs /tmp/ohs-0.1.0.tgz -n ohs -f values.yaml
+> ```
 
 ---
 

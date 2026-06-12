@@ -3,13 +3,7 @@
 ## Choose Your Cluster Mode
 
 - Standard Kubernetes cluster: target deployment mode.
-- Optional Minikube local profile: local development override only.
-
-If you use Minikube, start it before the quick start flow:
-
-```bash
-minikube start --driver=docker
-```
+- Docker Desktop Kubernetes: local development, using `values-local.yaml`.
 
 ## Quick Start
 
@@ -35,13 +29,10 @@ helm install ohs . -f values.yaml -n ohs
 kubectl get pods -n ohs -w
 ```
 
-For Minikube local mode, use the local override file and keep MongoDB user password aligned with your .env value:
+For local Docker Desktop mode, use the local override file:
 
 ```bash
-set -a; source .env; set +a
-helm package . -d /tmp/ && \
-helm upgrade --install ohs /tmp/ohs-0.1.0.tgz -f values.yaml -f values-minikube.yaml -n ohs \
-  --set-string mongodb.openfhir.userPassword="$OPENFHIR_MONGO_PASSWORD"
+helm upgrade --install ohs . -f values.yaml -f values-local.yaml -n ohs --timeout 15m
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full prerequisites and production notes.
@@ -117,23 +108,10 @@ docker build --build-arg ENVIRONMENT=deploy \
 **Local development (no registry):** build on the host Docker daemon (full network speed), then load into minikube:
 
 ```bash
-# Build on host (fast — full network speed for Maven/npm downloads)
-docker build -t cohort-explorer-backend:local cohort-explorer-backend/
-docker build --build-arg ENVIRONMENT=deploy -t cohort-explorer-frontend:local cohort-explorer-frontend/
-
-# Load into minikube's Docker daemon
-eval $(minikube docker-env -u)  # ensure host daemon is active for save
-docker save cohort-explorer-backend:local -o /tmp/backend.tar
-docker save cohort-explorer-frontend:local -o /tmp/frontend.tar
-
-eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
-docker load -i /tmp/backend.tar && rm /tmp/backend.tar
-docker load -i /tmp/frontend.tar && rm /tmp/frontend.tar
+# Docker Desktop shares the host Docker daemon — images are immediately available to Kubernetes.
+bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
+bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
 ```
-
-> **Note:** Do not build directly inside minikube's Docker daemon (`eval $(minikube docker-env)`) — Maven and npm will download dependencies through minikube's NAT layer at only a few kB/s.
-
-> **Note for Docker API mismatch:** If you see `client version X is too new`, set `export DOCKER_API_VERSION=1.43` before running docker commands against minikube.
 
 **Known build requirements for cohort-explorer-backend:**
 - Requires `.config/checkstyle.xml` and `.git/` to be present in the build context
@@ -171,7 +149,7 @@ The `crr` Keycloak realm and both clients (`num-portal`, `num-portal-webapp`) ar
 automatically on first Keycloak startup — no manual admin console steps required.
 See [NEXT_STEPS.md](NEXT_STEPS.md) for full prerequisites and secret keys needed.
 
-> **Important — frontend config URLs must be browser-accessible:** The `cohort-explorer-frontend.config.auth.baseUrl` and `cohort-explorer-frontend.config.api.baseUrl` values are fetched by the user's browser at runtime, not from inside the cluster. When port-forwarding, set them to `http://localhost:<port>` (e.g. `http://localhost:8083/auth` and `http://localhost:8084/num-portal`). See `values-minikube.yaml` for an example.
+> **Important — frontend config URLs must be browser-accessible:** The `cohort-explorer-frontend.config.auth.baseUrl` and `cohort-explorer-frontend.config.api.baseUrl` values are fetched by the user's browser at runtime, not from inside the cluster. When port-forwarding, set them to `http://localhost:<port>` (e.g. `http://localhost:8083/auth` and `http://localhost:8084/num-portal`). See `values-local.yaml` for an example.
 
 ### One-time: Create the attachment schema
 
@@ -255,17 +233,15 @@ OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
     --component openehrtool-frontend
 ```
 
-**Local development (minikube, no registry):** build directly into minikube's Docker daemon with `--skip-push`:
+**Local development (Docker Desktop, no registry):**
 
 ```bash
-eval $(minikube docker-env) && export DOCKER_API_VERSION=1.43
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
-OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
+bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
 
-`OPENEHRTOOL_BACKEND_HOSTNAME` is the ingress hostname used by the frontend to reach the backend API — it is baked into the Vue/Vite bundle at build time and must match your `openehrtool-backend.ingress.host` value.
+`OPENEHRTOOL_BACKEND_HOSTNAME` is baked into the Vue/Vite bundle at build time. Use `localhost` for local access via `kubectl port-forward`. For production, set it to the ingress hostname that matches `openehrtool-backend.ingress.host`.
 
 The three subcharts (`openehrtool-redis`, `openehrtool-backend`, `openehrtool-frontend`) are all enabled by default. Ensure the `openehrtool-jwt-secret` key is set in `ohs-credentials` (see [SECRETS.md](SECRETS.md)).
 
