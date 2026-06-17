@@ -36,6 +36,11 @@ resources:
     cpu: 250m
     memory: 512Mi
 
+startupDependencies:
+  postgres:
+    enabled: true
+    image: "postgres:15-alpine"
+
 # Keycloak-specific configuration
 config:
   # Start mode: "start" for production, "start-dev" for local/dev (skips TLS requirements)
@@ -69,6 +74,11 @@ config:
   # Import is idempotent: if the realm already exists, Keycloak skips it.
   realmImport:
     enabled: true
+
+  # Test user — enable ONLY for local development. NEVER enable in production.
+  # Creates testuser / test123 with SUPER_ADMIN role in the crr realm.
+  testUser:
+    enabled: false
 
 livenessProbe:
   enabled: true

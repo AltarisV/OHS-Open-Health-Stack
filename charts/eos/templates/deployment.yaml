@@ -25,9 +25,38 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.startupDependencies.postgres.enabled .Values.startupDependencies.ehrbase.enabled }}
+      initContainers:
+      {{- if .Values.startupDependencies.postgres.enabled }}
+      - name: wait-for-postgres
+        image: {{ .Values.startupDependencies.postgres.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until pg_isready -h {{ .Values.config.database.host | quote }} -p {{ .Values.config.database.port }} -U {{ .Values.config.database.username | quote }} -q; do
+            echo "Waiting for PostgreSQL at {{ .Values.config.database.host }}:{{ .Values.config.database.port }}..."
+            sleep 3
+          done
+      {{- end }}
+      {{- if .Values.startupDependencies.ehrbase.enabled }}
+      - name: wait-for-ehrbase
+        image: {{ .Values.startupDependencies.ehrbase.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until wget -q -T 5 -O /dev/null "{{ .Values.config.ehrbase.baseUrl }}/rest/openehr/v1/definition/template/adl1.4"; do
+            echo "Waiting for EHRbase at {{ .Values.config.ehrbase.baseUrl }}..."
+            sleep 5
+          done
+      {{- end }}
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ .Values.image.tag }}{{ end }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         
         ports:

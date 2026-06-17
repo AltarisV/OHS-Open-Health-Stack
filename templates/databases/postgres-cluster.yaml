@@ -104,6 +104,18 @@ spec:
   backup:
     barmanObjectStore:
       destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
+      {{- with .Values.postgres.backup.endpointURL }}
+      endpointURL: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.postgres.backup.s3Credentials }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .secretName | quote }}
+          key: {{ .accessKeyIdKey | default "ACCESS_KEY_ID" | quote }}
+        secretAccessKey:
+          name: {{ .secretName | quote }}
+          key: {{ .secretAccessKeyKey | default "ACCESS_SECRET_KEY" | quote }}
+      {{- end }}
       wal:
         compression: gzip
         maxParallel: 4
@@ -202,6 +214,18 @@ spec:
   backup:
     barmanObjectStore:
       destinationPath: {{ .Values.postgres.backup.destinationPath | quote }}
+      {{- with .Values.postgres.backup.endpointURL }}
+      endpointURL: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.postgres.backup.s3Credentials }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .secretName | quote }}
+          key: {{ .accessKeyIdKey | default "ACCESS_KEY_ID" | quote }}
+        secretAccessKey:
+          name: {{ .secretName | quote }}
+          key: {{ .secretAccessKeyKey | default "ACCESS_SECRET_KEY" | quote }}
+      {{- end }}
       wal:
         compression: gzip
       data:

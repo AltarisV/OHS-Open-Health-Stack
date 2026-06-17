@@ -105,10 +105,9 @@ docker build --build-arg ENVIRONMENT=deploy \
   -t YOUR_REGISTRY/cohort-explorer-frontend:latest cohort-explorer-frontend/
 ```
 
-**Local development (no registry):** build on the host Docker daemon (full network speed), then load into minikube:
+**Local development (no registry):** Docker Desktop shares the host Docker daemon — images built locally are immediately visible to Kubernetes without a registry:
 
 ```bash
-# Docker Desktop shares the host Docker daemon — images are immediately available to Kubernetes.
 bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
 bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
 ```
@@ -171,8 +170,13 @@ done
 
 ### First login: Create a user in the `crr` realm
 
-The `crr` realm has no default users. Create one via the Keycloak Admin API
-(requires the Keycloak port-forward to be running on 8083):
+> **Local development (`values-local.yaml`):** The user `testuser` (password: `test123`,
+> role: `SUPER_ADMIN`) is created automatically in the `crr` realm on first Keycloak startup.
+> Skip this section and log in directly at `http://localhost:8085`.
+
+> **Production:** `testUser.enabled` is `false` by default — no test user is created.
+> Follow the steps below to create your first user via the Keycloak Admin API
+> (requires the Keycloak port-forward to be running on 8083):
 
 ```bash
 KC_PASS=$(kubectl get secret ohs-credentials -n ohs -o jsonpath='{.data.keycloak-admin-password}' | base64 -d)

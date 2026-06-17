@@ -1,7 +1,11 @@
 {{- if .Values.networkPolicy }}
 {{- if .Values.networkPolicy.enabled }}
+{{- $ns := .Release.Namespace -}}
+{{- $nsLabel := .Values.networkPolicy.namespaceLabel | default $ns -}}
+{{- $ingressNs := .Values.networkPolicy.ingressControllerNamespace | default "ingress-nginx" -}}
 ---
-# Deny all ingress by default
+# Deny all ingress by default. Egress is intentionally left open so pods can reach
+# the cluster DNS, operators, and (for the internal-cloud deployment) approved egress.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -15,7 +19,31 @@ spec:
   - Ingress
 
 ---
-# Allow ingress from ingress controller to OHS services
+# Allow all pod-to-pod traffic within the OHS namespace.
+# Uses podSelector: {} so it also covers operator-managed pods (CloudNativePG,
+# MongoDB) that do NOT carry the chart's app labels — this is what lets the
+# application pods reach PostgreSQL (5432) and MongoDB (27017).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-internal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    # Same namespace. Requires the namespace to be labelled, e.g.
+    #   kubectl label namespace {{ $ns }} name={{ $nsLabel }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ $nsLabel }}
+
+---
+# Allow the ingress controller to reach the OHS application services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -26,53 +54,19 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: {{ .Release.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
   policyTypes:
   - Ingress
   ingress:
   - from:
     - namespaceSelector:
         matchLabels:
-          name: ingress-nginx  # Adjust for your Ingress controller namespace
+          name: {{ $ingressNs }}  # CHANGE_ME: your ingress controller namespace label
     ports:
+    {{- range .Values.networkPolicy.httpPorts | default (list 8080 8081 8090 80) }}
     - protocol: TCP
-      port: 8080
-
----
-# Allow pod-to-pod communication within OHS
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ .Release.Name }}-allow-internal
-  namespace: {{ .Release.Namespace }}
-  labels:
-    app: {{ .Release.Name }}
-spec:
-  podSelector:
-    matchLabels:
-      app: {{ .Release.Name }}
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          app: {{ .Release.Name }}
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app: {{ .Release.Name }}
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 5432   # PostgreSQL
-    - protocol: TCP
-      port: 27017  # MongoDB
-    - protocol: TCP
-      port: 8080   # HTTP services
+      port: {{ . }}
+    {{- end }}
 
 {{- end }}
 {{- end }}

@@ -14,7 +14,7 @@
 |-------|-------|--------|
 | 1-8 | Repository foundation, operators, core components, docs | COMPLETE |
 | 9 | openEHRTool-v2 packaging (build Docker image from crs4/openEHRTool-v2) | COMPLETE |
-| 10 | EHRsuction -- data export tool | PENDING |
+| 10 | EHRsuction -- data export tool | COMPLETE |
 | 11 | Data mirroring from BETTER Platform to EHRbase | PENDING |
 | 12 | Cohort Explorer (num-portal backend + Angular frontend) | COMPLETE |
 | 13 | CSV-to-openEHR bulk import | PENDING |
@@ -32,16 +32,7 @@
 
 Three subcharts: `openehrtool-backend` (FastAPI, port 5000), `openehrtool-frontend` (Vue3/nginx, port 80), `openehrtool-redis` (Redis 7).
 
-No published Docker images upstream. Build via `build-images.sh` which clones, patches, and builds into the target Docker daemon:
-
-```bash
-# Local (Docker Desktop — shares host daemon, no eval step needed)
-bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
-OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
-```
-
-`OPENEHRTOOL_BACKEND_HOSTNAME` is baked into the Vue bundle at build time. Use `localhost` for local port-forward access; use the ingress hostname for production.
+No published Docker images upstream. Build via `build-images.sh` (clones, patches, builds into the target Docker daemon) — see [GETTING_STARTED.md](GETTING_STARTED.md#building-openehrtool-v2) for the commands and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
 
 Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `create-secret.sh`).
 
@@ -49,13 +40,7 @@ One required upstream patch is applied automatically by `build-images.sh`: `SECR
 
 ## Cohort Explorer -- Deployment Notes
 
-No published Docker images. Build via `build-images.sh` for local dev:
-
-```bash
-# Docker Desktop — shares host daemon, images are immediately visible to Kubernetes
-bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
-bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
-```
+No published Docker images. Build via `build-images.sh` — see [GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for the build commands and known build requirements.
 
 **Prerequisites** (beyond the core stack):
 - **Keycloak** (required — the backend uses it for JWT auth and user management):

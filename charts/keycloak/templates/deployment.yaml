@@ -110,8 +110,22 @@ spec:
           readOnly: true
         {{- end }}
 
-      {{- if .Values.config.realmImport.enabled }}
+      {{- if or .Values.startupDependencies.postgres.enabled .Values.config.realmImport.enabled }}
       initContainers:
+      {{- if .Values.startupDependencies.postgres.enabled }}
+      - name: wait-for-postgres
+        image: {{ .Values.startupDependencies.postgres.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until pg_isready -h {{ .Values.config.database.host | quote }} -p {{ .Values.config.database.port }} -U {{ .Values.config.database.username | quote }} -q; do
+            echo "Waiting for PostgreSQL at {{ .Values.config.database.host }}:{{ .Values.config.database.port }}..."
+            sleep 3
+          done
+      {{- end }}
+      {{- if .Values.config.realmImport.enabled }}
       # Substitutes __NUM_PORTAL_CLIENT_SECRET__ in the realm JSON with the actual secret
       # value, writing the result to an emptyDir that the main container imports from.
       - name: realm-config
@@ -133,6 +147,7 @@ spec:
           readOnly: true
         - name: realm-import
           mountPath: /import
+      {{- end }}
       {{- end }}
 
       {{- with .Values.nodeSelector }}

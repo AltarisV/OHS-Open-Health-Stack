@@ -43,17 +43,21 @@ kubectl label namespace ohs name=ohs
 kubectl config set-context --current --namespace=ohs
 ```
 
-### Step 2: Add Helm Repositories
+### Step 2: Install the Required Operators
+
+The chart does **not** install the CloudNativePG or MongoDB Community operators. Install them cluster-wide before deploying OHS:
 
 ```bash
-# Add CloudNativePG repository (PostgreSQL operator)
-helm repo add cloudnative-pg https://cloudnative-pg.io/charts/
+# CloudNativePG operator (PostgreSQL)
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm install cnpg-system cnpg/cloudnative-pg --namespace cnpg-system --create-namespace
 
-# Add Bitnami repository (optional, for pre-built charts as fallback)
-helm repo add bitnami https://charts.bitnami.com/bitnami
-
-# Update Helm repositories
-helm repo update
+# MongoDB Community Operator
+# watchNamespace=ohs scopes the operator to the OHS namespace; use "*" to watch all.
+helm repo add mongodb https://mongodb.github.io/helm-charts
+helm install mongodb-operator mongodb/community-operator \
+  --namespace mongodb-operator --create-namespace \
+  --set operator.watchNamespace=ohs
 ```
 
 ### Step 3: Clone or Navigate to OHS Repository
@@ -94,9 +98,10 @@ ingress:
   hosts:
     - host: "ohs.yourdomain.org"
       paths:
-        - path: "/"
+        - path: "/ehrbase"
           pathType: "Prefix"
-          service: "ehrbase"
+          service: "ohs-ehrbase"
+          port: 8080
 
 # Set resource limits appropriate for your cluster
 ehrbase:
@@ -153,9 +158,9 @@ eos:
     password: "CHANGE_ME_DATABASE_PASSWORD"
 ```
 
-### Step 5: Create Kubernetes Secrets for Passwords
+### Step 5: Create the `ohs-credentials` Secret
 
-**Recommended (local dev):** copy `.env.example` to `.env`, fill in your values, then run the bootstrap script:
+The chart references the `ohs-credentials` secret but does not create it. It must exist before `helm install`.
 
 ```bash
 cp .env.example .env
@@ -163,20 +168,11 @@ cp .env.example .env
 bash create-secret.sh
 ```
 
-The script reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is committed as the template.
+`create-secret.sh` reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is the committed template.
 
-**Manual equivalent:**
+The complete list of required keys and the Sealed Secrets / External Secrets Operator / SOPS alternatives for production are documented in **[SECRETS.md](SECRETS.md)**.
 
-```bash
-kubectl create secret generic ohs-credentials -n ohs \
-  --from-literal=ehrbase-user-password=YOUR_PASSWORD \
-  --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
-  --from-literal=eos-db-password=YOUR_EOS_PASSWORD \
-  --from-literal=redis-password=YOUR_REDIS_PASSWORD \
-  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster'
-```
-
-> **Note:** The password in `openfhir-mongo-uri` must match the password provisioned in the MongoDB cluster. For staging/production, replace this with Sealed Secrets or External Secrets Operator — see [SECRETS.md](SECRETS.md).
+> **Note:** The password in `openfhir-mongo-uri` **must exactly match** `mongodb.openfhir.userPassword` in your values file, or openFHIR fails SCRAM authentication at startup.
 
 ### Step 6: Validate Helm Chart
 
@@ -290,19 +286,7 @@ kubectl get endpoints -n ohs | grep -E 'ehrbase|openfhir|eos'
 
 ### Health Endpoints Responding
 
-```bash
-# Port-forward to EHRbase and test health endpoint
-kubectl port-forward svc/ohs-ehrbase 8080:8080 -n ohs &
-curl -s http://localhost:8080/health | jq .
-
-# Port-forward to openFHIR
-kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs &
-curl -s http://localhost:8081/health | jq .
-
-# Port-forward to Eos
-kubectl port-forward svc/ohs-eos 8082:8080 -n ohs &
-curl -s http://localhost:8082/health | jq .
-```
+Port-forwards, health checks, and the full end-to-end workflow (EHR → composition → OMOP → Cohort Explorer) are documented in **[VERIFICATION.md](VERIFICATION.md)**. Note that Eos listens on `8081`, not `8080`, and EHRbase APIs are under the `/ehrbase` path prefix.
 
 ### Ingress Configured
 
@@ -336,52 +320,7 @@ kubectl logs -n ohs -l app=ehrbase -f
 
 ## First Deployment Tests
 
-### Test 1: EHRbase Patient Data Creation
-
-```bash
-# Port-forward to EHRbase
-kubectl port-forward svc/ohs-ehrbase 8080:8080 -n ohs
-
-# Create a simple EHR (requires curl + jq)
-EHR_RESPONSE=$(curl -s -X POST \
-  http://localhost:8080/rest/openehr/v1/ehr \
-  -H "Content-Type: application/json" \
-  -u "ehrbase_user:your_password" \
-  -d '{"ehr_status": {"archetype_node_id": "openEHR-EHR-EHR_STATUS.generic.v1"}}')
-
-# Extract EHR ID
-EHR_ID=$(echo $EHR_RESPONSE | jq -r '.ehr_id.value')
-echo "Created EHR: $EHR_ID"
-
-# Verify EHR exists
-curl -s http://localhost:8080/rest/openehr/v1/ehr/$EHR_ID \
-  -H "Authorization: Basic $(echo -n 'ehrbase_user:your_password' | base64)" | jq .
-```
-
-### Test 2: openFHIR FHIR Endpoint
-
-```bash
-# Port-forward to openFHIR
-kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
-
-# Query FHIR Patient resource
-curl -s 'http://localhost:8081/fhir/Patient' | jq '.resourceType, .entry'
-
-# Should return FHIR Patient Bundle (initially empty)
-```
-
-### Test 3: Eos OMOP CDM Status
-
-```bash
-# Port-forward to Eos
-kubectl port-forward svc/ohs-eos 8082:8080 -n ohs
-
-# Check Eos status
-curl -s http://localhost:8082/health | jq .
-
-# Get OMOP mapping status
-curl -s http://localhost:8082/api/eos/status | jq .
-```
+See **[VERIFICATION.md](VERIFICATION.md)** for the complete functional test suite: creating an EHR, uploading a template, submitting a blood pressure composition, running the Eos OMOP transformation, and viewing the result in the Cohort Explorer.
 
 ---
 
@@ -446,22 +385,10 @@ See Step 5 above for Sealed Secrets or External Secrets Operator setup.
 
 ### Problem: cohort-explorer-backend CrashLoopBackOff (`num-attachment` schema missing)
 
-`ProjectMapper` unconditionally requires `AttachmentService`, which in turn needs the
-`num-attachment` schema to exist in the `numportal` database. Flyway only creates tables,
-not schemas — so the schema must be created once manually after the postgres cluster is ready:
-
-```bash
-# Find the primary pod (not in recovery)
-for i in 1 2 3; do
-  PRIMARY=$(kubectl exec -n ohs postgres-cluster-$i -- psql -U postgres -d numportal \
-    -c 'SELECT pg_is_in_recovery();' 2>/dev/null | grep -c " f")
-  if [ "$PRIMARY" -gt 0 ]; then
-    kubectl exec -n ohs postgres-cluster-$i -- psql -U postgres -d numportal \
-      -c 'CREATE SCHEMA IF NOT EXISTS "num-attachment"; GRANT ALL ON SCHEMA "num-attachment" TO numportal;'
-    break
-  fi
-done
-```
+`ProjectMapper` unconditionally requires `AttachmentService`, which needs the `num-attachment`
+schema to exist in the `numportal` database. Flyway only creates tables, not schemas, so the
+schema must be created once after the postgres cluster is ready. The one-time setup script is
+in [GETTING_STARTED.md](GETTING_STARTED.md#one-time-create-the-attachment-schema).
 
 ### Problem: cohort-explorer-frontend shows "authentication service" error
 
@@ -659,57 +586,18 @@ kubectl delete namespace ohs
 
 These notes were discovered during real deployment and address issues not covered above.
 
-### Operator Pre-Installation (Required)
+Operator pre-installation (Step 2) and the `ohs-credentials` secret (Step 5 / [SECRETS.md](SECRETS.md)) are already covered in the installation steps above.
 
-The chart does **not** install the CloudNativePG or MongoDB Community operators itself. They must be installed cluster-wide before deploying OHS:
+### PostgreSQL Cluster Persistence Across Upgrades
 
-```bash
-# CloudNativePG operator
-helm repo add cnpg https://cloudnative-pg.github.io/charts
-helm install cnpg-system cnpg/cloudnative-pg --namespace cnpg-system --create-namespace
+The `postgres-cluster.yaml` Cluster resource is annotated with `helm.sh/resource-policy: keep`, so `helm uninstall` and `helm upgrade` do **not** delete the cluster or its PVCs — data survives. The CNPG operator manages the cluster lifecycle independently of the Helm release.
 
-# MongoDB Community Operator
-# watchNamespace=* allows the operator to watch all namespaces.
-# For production, set watchNamespace to your target namespace.
-helm repo add mongodb https://mongodb.github.io/helm-charts
-helm install mongodb-operator mongodb/community-operator \
-  --namespace mongodb-operator --create-namespace \
-  --set operator.watchNamespace=ohs
-```
+- To fully remove a cluster (and its data), delete it manually: `kubectl delete cluster postgres-cluster -n ohs`.
+- Because the cluster is kept, always reinstall with `helm upgrade --install` to avoid "already exists" errors (see Uninstallation above).
 
-### `ohs-credentials` Secret (Required Before Install)
+### Service Ports
 
-This secret must be created manually before `helm install`. The chart references it but does not create it:
-
-```bash
-kubectl create secret generic ohs-credentials --namespace ohs \
-  --from-literal=ehrbase-user-password=YOUR_SECURE_PASSWORD \
-  --from-literal=ehrbase-db-password=YOUR_DB_PASSWORD \
-  --from-literal=openfhir-mongo-uri='mongodb://openfhir:MONGO_USER_PASS@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir' \
-  --from-literal=eos-db-password=YOUR_EOS_DB_PASSWORD \
-  --from-literal=redis-password=YOUR_REDIS_PASSWORD
-```
-
-The MongoDB URI password in `openfhir-mongo-uri` **must exactly match** `mongodb.openfhir.userPassword` in your values file, otherwise openFHIR will fail SCRAM authentication at startup.
-
-### Critical: PostgreSQL Cluster Recreated on Every Upgrade
-
-The `postgres-cluster.yaml` Helm hook uses `helm.sh/hook-delete-policy: before-hook-creation`, which **deletes and recreates the entire PostgreSQL cluster on every `helm upgrade`**, wiping all data.
-
-- **For production**: Remove the `helm.sh/hook` annotations from `templates/databases/postgres-cluster.yaml` and manage the `Cluster` resource lifecycle independently from the Helm release. Apply database schema changes manually.
-- **For development**: This behaviour is acceptable but be aware that EHRbase will re-run all Flyway migrations and all stored data is lost on every upgrade.
-
-### Service Ports Reference
-
-| Service | Container Port | Service Port |
-|---------|---------------|-------------|
-| EHRbase | 8080 | 8080 |
-| openFHIR | 8080 | 8080 |
-| Eos | **8081** | **8081** |
-| PostgreSQL (CNPG -rw) | 5432 | 5432 |
-| MongoDB | 27017 | 27017 |
-
-> **Note**: Eos runs on port 8081 (configured via `server.port: 8081` in its `application.yml`), not 8080. Liveness/readiness probes and the service `targetPort` must use 8081.
+See the [Service Ports table in ARCHITECTURE.md](ARCHITECTURE.md#service-ports). Key gotcha: Eos listens on **8081** (`server.port: 8081` in its `application.yml`), not 8080 — its probes and service `targetPort` must use 8081.
 
 ### CNPG Service Name
 

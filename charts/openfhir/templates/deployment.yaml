@@ -25,6 +25,35 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.startupDependencies.mongodb.enabled .Values.startupDependencies.ehrbase.enabled }}
+      initContainers:
+      {{- if .Values.startupDependencies.mongodb.enabled }}
+      - name: wait-for-mongodb
+        image: {{ .Values.startupDependencies.mongodb.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until nc -z {{ .Values.startupDependencies.mongodb.host | quote }} {{ .Values.startupDependencies.mongodb.port }}; do
+            echo "Waiting for MongoDB at {{ .Values.startupDependencies.mongodb.host }}:{{ .Values.startupDependencies.mongodb.port }}..."
+            sleep 3
+          done
+      {{- end }}
+      {{- if .Values.startupDependencies.ehrbase.enabled }}
+      - name: wait-for-ehrbase
+        image: {{ .Values.startupDependencies.ehrbase.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until wget -q -T 5 -O /dev/null "{{ .Values.config.ehrbase.baseUrl }}/rest/openehr/v1/definition/template/adl1.4"; do
+            echo "Waiting for EHRbase at {{ .Values.config.ehrbase.baseUrl }}..."
+            sleep 5
+          done
+      {{- end }}
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

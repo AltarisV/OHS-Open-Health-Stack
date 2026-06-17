@@ -77,6 +77,24 @@ data:
             ]
           }
         }
+        {{- if .Values.config.testUser.enabled }},
+        {
+          "username": "testuser",
+          "enabled": true,
+          "emailVerified": true,
+          "email": "testuser@test.local",
+          "firstName": "Test",
+          "lastName": "User",
+          "credentials": [
+            {
+              "type": "password",
+              "value": "test123",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["SUPER_ADMIN"]
+        }
+        {{- end }}
       ]
     }
 {{- end }}

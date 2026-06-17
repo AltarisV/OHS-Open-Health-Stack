@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OHS E2E Test Console</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3e;
+    --text: #e2e4f0; --muted: #6b7280; --accent: #6366f1;
+    --green: #22c55e; --red: #ef4444; --yellow: #f59e0b;
+    --code-bg: #0d1117;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header .badge { font-size: 11px; background: var(--accent); padding: 2px 8px; border-radius: 99px; }
+
+  .layout { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 61px); }
+
+  /* Sidebar */
+  nav { border-right: 1px solid var(--border); padding: 16px 0; overflow-y: auto; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 8px 20px; cursor: pointer; color: var(--muted); text-decoration: none; font-size: 13px; transition: all .15s; }
+  nav a:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  nav a.active { color: var(--text); background: rgba(99,102,241,.15); border-right: 2px solid var(--accent); }
+  nav a .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  nav a.done .step-num { background: var(--green); color: #000; }
+  nav a.error .step-num { background: var(--red); }
+  nav .section-label { padding: 16px 20px 6px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+  /* Main */
+  main { overflow-y: auto; padding: 28px 36px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .desc { color: var(--muted); margin-bottom: 20px; font-size: 13px; line-height: 1.6; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .card h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  .fields { display: grid; gap: 12px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 13px; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  .actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button { padding: 8px 18px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: #4f46e5; }
+  button.secondary { background: var(--border); color: var(--text); }
+  button.secondary:hover { background: #353850; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .status { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+  .status.running { color: var(--yellow); }
+
+  .response-box { margin-top: 14px; }
+  .response-box label { margin-bottom: 6px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 280px; overflow-y: auto; color: #a0aec0; }
+  pre.ok { border-color: rgba(34,197,94,.3); }
+  pre.err { border-color: rgba(239,68,68,.3); color: #fca5a5; }
+
+  .propagated { font-size: 11px; color: var(--accent); margin-top: 4px; }
+
+  .cors-note { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: 6px; padding: 12px 14px; font-size: 12px; color: var(--yellow); margin-bottom: 16px; line-height: 1.6; }
+  .cors-note code { background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OHS E2E Test Console</h1>
+  <span class="badge">Local Dev</span>
+</header>
+
+<div class="layout">
+<nav>
+  <div class="section-label">Setup</div>
+  <a onclick="show('config')" id="nav-config" class="active"><span class="step-num">⚙</span> Configuration</a>
+
+  <div class="section-label">EHRbase</div>
+  <a onclick="show('s1')" id="nav-s1"><span class="step-num">1</span> Create EHR</a>
+  <a onclick="show('s2')" id="nav-s2"><span class="step-num">2</span> Upload Template</a>
+  <a onclick="show('s3')" id="nav-s3"><span class="step-num">3</span> Submit Composition</a>
+
+  <div class="section-label">OMOP</div>
+  <a onclick="show('s4')" id="nav-s4"><span class="step-num">4</span> EOS Transformation</a>
+
+  <div class="section-label">Cohort Explorer</div>
+  <a onclick="show('s5')" id="nav-s5"><span class="step-num">5</span> Keycloak Login</a>
+  <a onclick="show('s6')" id="nav-s6"><span class="step-num">6</span> Query Cohorts</a>
+
+  <div class="section-label">Extras</div>
+  <a onclick="show('s7')" id="nav-s7"><span class="step-num">✦</span> FHIR / openFHIR</a>
+</nav>
+
+<main>
+
+<!-- CONFIG -->
+<div class="panel active" id="panel-config">
+  <h2>Configuration</h2>
+  <p class="desc">Set your port-forward addresses and credentials here. Values are stored in memory only and auto-filled into all steps below.</p>
+
+  <div class="cors-note">
+    ⚠ Serve this file from a local HTTP server to avoid browser CORS restrictions:<br>
+    <code>python -m http.server 8888 --directory docs/test-ui</code> → open <code>http://localhost:8888</code>
+  </div>
+
+  <div class="card">
+    <h3>Port-Forward Addresses</h3>
+    <div class="fields">
+      <div class="field-row three">
+        <div><label>EHRbase</label><input id="cfg-ehrbase" value="http://localhost:8080"></div>
+        <div><label>EOS</label><input id="cfg-eos" value="http://localhost:8082"></div>
+        <div><label>Keycloak</label><input id="cfg-kc" value="http://localhost:8083"></div>
+      </div>
+      <div class="field-row">
+        <div><label>Cohort Explorer Backend</label><input id="cfg-ceb" value="http://localhost:8084"></div>
+        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8081"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Credentials</h3>
+    <div class="fields">
+      <div class="field-row">
+        <div><label>EHRbase Username</label><input id="cfg-ehr-user" value="ehrbase_user"></div>
+        <div><label>EHRbase Password</label><input id="cfg-ehr-pass" type="password" placeholder="from ohs-credentials secret"></div>
+      </div>
+      <div class="field-row">
+        <div><label>Keycloak Username</label><input id="cfg-kc-user" value="testuser"></div>
+        <div><label>Keycloak Password</label><input id="cfg-kc-pass" value="test123"></div>
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick="show('s1')">Start E2E Workflow →</button>
+  </div>
+</div>
+
+<!-- STEP 1: Create EHR -->
+<div class="panel" id="panel-s1">
+  <h2>Step 1 — Create EHR</h2>
+  <p class="desc">Creates a new Electronic Health Record in EHRbase for a test patient. The resulting EHR ID is stored and used in subsequent steps.</p>
+  <div class="card">
+    <h3>Parameters</h3>
+    <div class="fields">
+      <div class="field-row">
+        <div><label>Patient ID (external ref)</label><input id="s1-patient-id" value="patient-test-001"></div>
+        <div><label>EHR ID (auto-filled after creation)</label><input id="s1-ehr-id" placeholder="will be filled automatically" readonly></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="step1()">Create EHR</button>
+      <span class="status" id="s1-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s1-resp-box" style="display:none">
+    <label>Response</label>
+    <pre id="s1-resp"></pre>
+  </div>
+</div>
+
+<!-- STEP 2: Upload Template -->
+<div class="panel" id="panel-s2">
+  <h2>Step 2 — Upload Blood Pressure Template</h2>
+  <p class="desc">Uploads the <code>Blutdruck</code> Operational Template to EHRbase. This only needs to be done once — subsequent uploads of the same template ID are rejected with 409 (that's fine).</p>
+  <div class="card">
+    <h3>Template</h3>
+    <div class="fields">
+      <div><label>Template ID</label><input id="s2-template-id" value="Blutdruck" readonly></div>
+      <div><label>OPT XML (paste or use bundled)</label>
+        <textarea id="s2-opt" rows="6" style="width:100%;background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:monospace;font-size:11px;resize:vertical;" placeholder="Paste OPT XML here, or click 'Use bundled template' below"></textarea>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="secondary" onclick="loadBundledTemplate()">Use bundled Blutdruck.opt</button>
+      <button class="primary" onclick="step2()">Upload Template</button>
+      <span class="status" id="s2-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s2-resp-box" style="display:none">
+    <label>Response</label>
+    <pre id="s2-resp"></pre>
+  </div>
+</div>
+
+<!-- STEP 3: Submit Composition -->
+<div class="panel" id="panel-s3">
+  <h2>Step 3 — Submit Blood Pressure Composition</h2>
+  <p class="desc">Submits a blood pressure observation into the EHR created in Step 1.</p>
+  <div class="card">
+    <h3>Values</h3>
+    <div class="fields">
+      <div class="field-row three">
+        <div>
+          <label>EHR ID</label>
+          <input id="s3-ehr-id" placeholder="from Step 1">
+          <div class="propagated" id="s3-ehr-propagated"></div>
+        </div>
+        <div><label>Systolic (mm[Hg])</label><input id="s3-sys" value="120" type="number"></div>
+        <div><label>Diastolic (mm[Hg])</label><input id="s3-dia" value="80" type="number"></div>
+      </div>
+      <div class="field-row">
+        <div><label>Measurement DateTime</label><input id="s3-datetime" value="2024-01-15T10:00:00Z"></div>
+        <div><label>Composition UID (auto-filled)</label><input id="s3-comp-uid" placeholder="will be filled automatically" readonly></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="step3()">Submit Composition</button>
+      <span class="status" id="s3-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s3-resp-box" style="display:none">
+    <label>Response</label>
+    <pre id="s3-resp"></pre>
+  </div>
+</div>
+
+<!-- STEP 4: EOS -->
+<div class="panel" id="panel-s4">
+  <h2>Step 4 — EOS OMOP Transformation</h2>
+  <p class="desc">Triggers EOS to read compositions from EHRbase and write OMOP CDM records. Requires Athena vocabularies to be loaded and <code>athenaVocabulariesPresent=true</code> in EOS config.</p>
+  <div class="card">
+    <h3>Trigger</h3>
+    <div class="actions">
+      <button class="primary" onclick="step4person()">POST /person</button>
+      <button class="secondary" onclick="step4ehr()">POST /ehr</button>
+      <span class="status" id="s4-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s4-person-box" style="display:none">
+    <label>/person response</label>
+    <pre id="s4-person-resp"></pre>
+  </div>
+  <div class="response-box" id="s4-ehr-box" style="display:none">
+    <label>/ehr response</label>
+    <pre id="s4-ehr-resp"></pre>
+  </div>
+</div>
+
+<!-- STEP 5: Keycloak Login -->
+<div class="panel" id="panel-s5">
+  <h2>Step 5 — Keycloak Login</h2>
+  <p class="desc">Fetches a JWT access token for the test user. The token is stored and used in Step 6 to query the Cohort Explorer API.</p>
+  <div class="card">
+    <h3>Credentials</h3>
+    <div class="fields">
+      <div class="field-row three">
+        <div><label>Realm</label><input id="s5-realm" value="crr"></div>
+        <div><label>Username</label><input id="s5-user" value="testuser"></div>
+        <div><label>Password</label><input id="s5-pass" type="password" value="test123"></div>
+      </div>
+      <div><label>Access Token (auto-filled)</label><input id="s5-token" placeholder="will be filled automatically" readonly style="font-size:11px"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="step5()">Get Token</button>
+      <span class="status" id="s5-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s5-resp-box" style="display:none">
+    <label>Token Response</label>
+    <pre id="s5-resp"></pre>
+  </div>
+</div>
+
+<!-- STEP 6: Cohort Explorer -->
+<div class="panel" id="panel-s6">
+  <h2>Step 6 — Cohort Explorer API</h2>
+  <p class="desc">Queries the Cohort Explorer backend using the JWT token from Step 5.</p>
+  <div class="card">
+    <h3>Queries</h3>
+    <div class="fields">
+      <div><label>Access Token</label><input id="s6-token" placeholder="from Step 5" style="font-size:11px"><div class="propagated" id="s6-token-propagated"></div></div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="s6query('/api/v1/cohort', 's6-cohorts')">List Cohorts</button>
+      <button class="secondary" onclick="s6query('/api/v1/organization', 's6-orgs')">List Organizations</button>
+      <button class="secondary" onclick="s6query('/api/v1/content', 's6-content')">List Content</button>
+      <span class="status" id="s6-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s6-cohorts-box" style="display:none"><label>/api/v1/cohort</label><pre id="s6-cohorts"></pre></div>
+  <div class="response-box" id="s6-orgs-box" style="display:none"><label>/api/v1/organization</label><pre id="s6-orgs"></pre></div>
+  <div class="response-box" id="s6-content-box" style="display:none"><label>/api/v1/content</label><pre id="s6-content"></pre></div>
+</div>
+
+<!-- STEP 7: FHIR -->
+<div class="panel" id="panel-s7">
+  <h2>openFHIR — FHIR Queries</h2>
+  <p class="desc">Basic FHIR R4 queries against the openFHIR server.</p>
+  <div class="card">
+    <h3>Queries</h3>
+    <div class="fields">
+      <div class="field-row">
+        <div><label>EHR ID (for patient lookup)</label><input id="s7-ehr-id" placeholder="from Step 1"><div class="propagated" id="s7-ehr-propagated"></div></div>
+        <div></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="fhirQuery('/fhir/Patient', 's7-patients')">GET /fhir/Patient</button>
+      <button class="secondary" onclick="fhirQueryById()">GET Patient by EHR ID</button>
+      <button class="secondary" onclick="fhirQuery('/fhir/Observation', 's7-obs')">GET /fhir/Observation</button>
+      <span class="status" id="s7-status"></span>
+    </div>
+  </div>
+  <div class="response-box" id="s7-patients-box" style="display:none"><label>Patients</label><pre id="s7-patients"></pre></div>
+  <div class="response-box" id="s7-obs-box" style="display:none"><label>Observations</label><pre id="s7-obs"></pre></div>
+</div>
+
+</main>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const state = { ehrId: null, compUid: null, token: null };
+
+// ── Navigation ────────────────────────────────────────────────────────────
+function show(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.getElementById('nav-' + id)?.classList.add('active');
+  propagateState();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const cfg = k => document.getElementById(k).value.trim();
+const val = k => document.getElementById(k).value.trim();
+const set = (k, v) => { document.getElementById(k).value = v; };
+const showResp = (boxId, preId, data, ok) => {
+  document.getElementById(boxId).style.display = 'block';
+  const pre = document.getElementById(preId);
+  pre.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  pre.className = ok ? 'ok' : 'err';
+};
+const setStatus = (id, msg, type) => {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status ' + type;
+};
+const markNav = (id, ok) => {
+  const a = document.getElementById('nav-' + id);
+  if (!a) return;
+  a.classList.remove('done', 'error');
+  a.classList.add(ok ? 'done' : 'error');
+};
+function ehrbaseAuth() {
+  return 'Basic ' + btoa(cfg('cfg-ehr-user') + ':' + cfg('cfg-ehr-pass'));
+}
+async function apiFetch(url, opts = {}) {
+  const resp = await fetch(url, opts);
+  const text = await resp.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = text; }
+  return { ok: resp.ok, status: resp.status, body: json, raw: text };
+}
+
+function propagateState() {
+  if (state.ehrId) {
+    set('s1-ehr-id', state.ehrId);
+    set('s3-ehr-id', state.ehrId);
+    set('s7-ehr-id', state.ehrId);
+    document.getElementById('s3-ehr-propagated').textContent = '↑ from Step 1';
+    document.getElementById('s7-ehr-propagated').textContent = '↑ from Step 1';
+  }
+  if (state.token) {
+    set('s5-token', state.token.substring(0, 60) + '...');
+    set('s6-token', state.token.substring(0, 60) + '...');
+    document.getElementById('s6-token-propagated').textContent = '↑ from Step 5';
+  }
+}
+
+// ── Step 1: Create EHR ────────────────────────────────────────────────────
+async function step1() {
+  setStatus('s1-status', 'Creating...', 'running');
+  const patientId = val('s1-patient-id');
+  const body = {
+    _type: 'EHR_STATUS',
+    archetype_node_id: 'openEHR-EHR-EHR_STATUS.generic.v1',
+    name: { _type: 'DV_TEXT', value: 'EHR Status' },
+    subject: { external_ref: { id: { _type: 'GENERIC_ID', value: patientId, scheme: 'test' }, namespace: 'test', type: 'PERSON' } },
+    is_modifiable: true,
+    is_queryable: true
+  };
+  try {
+    const r = await apiFetch(cfg('cfg-ehrbase') + '/ehrbase/rest/openehr/v1/ehr', {
+      method: 'POST',
+      headers: { 'Authorization': ehrbaseAuth(), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify(body)
+    });
+    showResp('s1-resp-box', 's1-resp', r.body, r.ok);
+    if (r.ok && r.body?.ehr_id?.value) {
+      state.ehrId = r.body.ehr_id.value;
+      setStatus('s1-status', '✓ EHR ID: ' + state.ehrId.substring(0, 8) + '...', 'ok');
+      markNav('s1', true);
+      propagateState();
+    } else {
+      setStatus('s1-status', '✗ HTTP ' + r.status, 'err');
+      markNav('s1', false);
+    }
+  } catch(e) {
+    showResp('s1-resp-box', 's1-resp', e.message, false);
+    setStatus('s1-status', '✗ ' + e.message, 'err');
+    markNav('s1', false);
+  }
+}
+
+// ── Step 2: Upload Template ────────────────────────────────────────────────
+const BUNDLED_OPT = `<?xml version="1.0" encoding="UTF-8"?>
+<template xmlns="openEHR/v1/Template">
+  <id>Blutdruck</id>
+  <name>Blutdruck</name>
+  <description>
+    <lifecycle_state>Initial</lifecycle_state>
+    <details>
+      <purpose>Minimal blood pressure template for OHS end-to-end verification.</purpose>
+      <use>Upload to EHRbase once, then submit compositions using template_id "Blutdruck".</use>
+      <misuse/>
+      <language><terminology_id><value>ISO_639-1</value></terminology_id><code_string>en</code_string></language>
+    </details>
+  </description>
+  <definition xsi:type="COMPOSITION" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
+              concept_name="Encounter" maxOccurrences="1"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Content xsi:type="OBSERVATION" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
+             concept_name="Blood Pressure" max="1" path="/content"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0004]" max="1"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0005]" max="1"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1006]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1007]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0033]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1005]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at0008]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1052]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1043]" max="0"/>
+      <Rule path="/data[at0001]/events[at1042]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at0013]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at0014]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at1010]" max="0"/>
+    </Content>
+  </definition>
+  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <digest id="MD5-CAM-1.0.1">10250E3AD051C33DB43D2DA76A272E08</digest>
+  </integrity_checks>
+  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <digest id="MD5-CAM-1.0.1">D9F6C309F70B55A7BA405FB68EE2F28E</digest>
+  </integrity_checks>
+</template>`;
+
+function loadBundledTemplate() {
+  document.getElementById('s2-opt').value = BUNDLED_OPT;
+}
+
+async function step2() {
+  const opt = document.getElementById('s2-opt').value.trim();
+  if (!opt) { alert('Paste an OPT XML or click "Use bundled template" first.'); return; }
+  setStatus('s2-status', 'Uploading...', 'running');
+  try {
+    const r = await apiFetch(cfg('cfg-ehrbase') + '/ehrbase/rest/openehr/v1/definition/template/adl1.4', {
+      method: 'POST',
+      headers: { 'Authorization': ehrbaseAuth(), 'Content-Type': 'application/xml' },
+      body: opt
+    });
+    showResp('s2-resp-box', 's2-resp', r.raw || r.body, r.ok || r.status === 409);
+    if (r.ok) {
+      setStatus('s2-status', '✓ Template uploaded', 'ok');
+      markNav('s2', true);
+    } else if (r.status === 409) {
+      setStatus('s2-status', '✓ Already exists (409)', 'ok');
+      markNav('s2', true);
+    } else {
+      setStatus('s2-status', '✗ HTTP ' + r.status, 'err');
+      markNav('s2', false);
+    }
+  } catch(e) {
+    showResp('s2-resp-box', 's2-resp', e.message, false);
+    setStatus('s2-status', '✗ ' + e.message, 'err');
+    markNav('s2', false);
+  }
+}
+
+// ── Step 3: Submit Composition ────────────────────────────────────────────
+async function step3() {
+  const ehrId = val('s3-ehr-id') || state.ehrId;
+  if (!ehrId) { alert('No EHR ID — run Step 1 first.'); return; }
+  const sys = parseFloat(val('s3-sys'));
+  const dia = parseFloat(val('s3-dia'));
+  const dt = val('s3-datetime');
+  setStatus('s3-status', 'Submitting...', 'running');
+
+  const body = {
+    _type: 'COMPOSITION',
+    name: { _type: 'DV_TEXT', value: 'Blutdruck' },
+    archetype_details: {
+      _type: 'ARCHETYPED',
+      archetype_id: { _type: 'ARCHETYPE_ID', value: 'openEHR-EHR-COMPOSITION.encounter.v1' },
+      template_id: { _type: 'TEMPLATE_ID', value: 'Blutdruck' },
+      rm_version: '1.0.2'
+    },
+    language: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_639-1' }, code_string: 'de' },
+    territory: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_3166-1' }, code_string: 'DE' },
+    category: { _type: 'DV_CODED_TEXT', value: 'event', defining_code: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'openehr' }, code_string: '433' } },
+    composer: { _type: 'PARTY_SELF' },
+    content: [{
+      _type: 'OBSERVATION',
+      name: { _type: 'DV_TEXT', value: 'Blutdruck' },
+      archetype_node_id: 'openEHR-EHR-OBSERVATION.blood_pressure.v2',
+      language: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_639-1' }, code_string: 'de' },
+      encoding: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'IANA_character-sets' }, code_string: 'UTF-8' },
+      subject: { _type: 'PARTY_SELF' },
+      data: {
+        _type: 'HISTORY', name: { _type: 'DV_TEXT', value: 'history' }, archetype_node_id: 'at0001',
+        origin: { _type: 'DV_DATE_TIME', value: dt },
+        events: [{
+          _type: 'POINT_EVENT', name: { _type: 'DV_TEXT', value: 'any event' }, archetype_node_id: 'at0006',
+          time: { _type: 'DV_DATE_TIME', value: dt },
+          data: {
+            _type: 'ITEM_TREE', name: { _type: 'DV_TEXT', value: 'Tree' }, archetype_node_id: 'at0003',
+            items: [
+              { _type: 'ELEMENT', name: { _type: 'DV_TEXT', value: 'Systolisch' }, archetype_node_id: 'at0004', value: { _type: 'DV_QUANTITY', magnitude: sys, units: 'mm[Hg]', precision: 0 } },
+              { _type: 'ELEMENT', name: { _type: 'DV_TEXT', value: 'Diastolisch' }, archetype_node_id: 'at0005', value: { _type: 'DV_QUANTITY', magnitude: dia, units: 'mm[Hg]', precision: 0 } }
+            ]
+          }
+        }]
+      }
+    }]
+  };
+
+  try {
+    const r = await apiFetch(cfg('cfg-ehrbase') + '/ehrbase/rest/openehr/v1/ehr/' + ehrId + '/composition', {
+      method: 'POST',
+      headers: { 'Authorization': ehrbaseAuth(), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify(body)
+    });
+    showResp('s3-resp-box', 's3-resp', r.body, r.ok);
+    if (r.ok && r.body?.uid?.value) {
+      state.compUid = r.body.uid.value;
+      set('s3-comp-uid', state.compUid);
+      setStatus('s3-status', '✓ ' + state.compUid.substring(0, 18) + '...', 'ok');
+      markNav('s3', true);
+    } else {
+      setStatus('s3-status', '✗ HTTP ' + r.status, 'err');
+      markNav('s3', false);
+    }
+  } catch(e) {
+    showResp('s3-resp-box', 's3-resp', e.message, false);
+    setStatus('s3-status', '✗ ' + e.message, 'err');
+    markNav('s3', false);
+  }
+}
+
+// ── Step 4: EOS ───────────────────────────────────────────────────────────
+async function eosPost(path, boxId, respId) {
+  try {
+    const r = await apiFetch(cfg('cfg-eos') + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+    });
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, r.body, r.ok);
+    return r.ok;
+  } catch(e) {
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, e.message, false);
+    return false;
+  }
+}
+async function step4person() {
+  setStatus('s4-status', 'Posting /person...', 'running');
+  const ok = await eosPost('/person', 's4-person-box', 's4-person-resp');
+  setStatus('s4-status', ok ? '✓ /person done' : '✗ /person failed', ok ? 'ok' : 'err');
+  if (ok) markNav('s4', true);
+}
+async function step4ehr() {
+  setStatus('s4-status', 'Posting /ehr...', 'running');
+  const ok = await eosPost('/ehr', 's4-ehr-box', 's4-ehr-resp');
+  setStatus('s4-status', ok ? '✓ /ehr done' : '✗ /ehr failed', ok ? 'ok' : 'err');
+}
+
+// ── Step 5: Keycloak ──────────────────────────────────────────────────────
+async function step5() {
+  setStatus('s5-status', 'Fetching token...', 'running');
+  const realm = val('s5-realm');
+  const body = new URLSearchParams({
+    grant_type: 'password', client_id: 'num-portal-webapp',
+    username: val('s5-user'), password: document.getElementById('s5-pass').value
+  });
+  try {
+    const r = await apiFetch(cfg('cfg-kc') + '/auth/realms/' + realm + '/protocol/openid-connect/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
+    });
+    const display = { ...r.body };
+    if (display.access_token) display.access_token = display.access_token.substring(0, 40) + '...(truncated)';
+    showResp('s5-resp-box', 's5-resp', display, r.ok);
+    if (r.ok && r.body?.access_token) {
+      state.token = r.body.access_token;
+      setStatus('s5-status', '✓ Token obtained (expires in ' + r.body.expires_in + 's)', 'ok');
+      markNav('s5', true);
+      propagateState();
+    } else {
+      setStatus('s5-status', '✗ HTTP ' + r.status, 'err');
+      markNav('s5', false);
+    }
+  } catch(e) {
+    showResp('s5-resp-box', 's5-resp', e.message, false);
+    setStatus('s5-status', '✗ ' + e.message, 'err');
+    markNav('s5', false);
+  }
+}
+
+// ── Step 6: Cohort Explorer ───────────────────────────────────────────────
+async function s6query(path, respId) {
+  const token = state.token;
+  if (!token) { alert('No token — run Step 5 first.'); return; }
+  setStatus('s6-status', 'Querying ' + path + '...', 'running');
+  const boxId = respId + '-box';
+  try {
+    const r = await apiFetch(cfg('cfg-ceb') + '/num-portal' + path, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, r.body, r.ok);
+    setStatus('s6-status', r.ok ? '✓ ' + path : '✗ HTTP ' + r.status, r.ok ? 'ok' : 'err');
+    if (r.ok) markNav('s6', true);
+  } catch(e) {
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, e.message, false);
+    setStatus('s6-status', '✗ ' + e.message, 'err');
+  }
+}
+
+// ── Step 7: FHIR ─────────────────────────────────────────────────────────
+async function fhirQuery(path, respId) {
+  const boxId = respId + '-box';
+  setStatus('s7-status', 'Querying...', 'running');
+  try {
+    const r = await apiFetch(cfg('cfg-fhir') + path);
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, r.body, r.ok);
+    setStatus('s7-status', r.ok ? '✓ ' + path : '✗ HTTP ' + r.status, r.ok ? 'ok' : 'err');
+  } catch(e) {
+    document.getElementById(boxId).style.display = 'block';
+    showResp(boxId, respId, e.message, false);
+    setStatus('s7-status', '✗ ' + e.message, 'err');
+  }
+}
+async function fhirQueryById() {
+  const id = val('s7-ehr-id') || state.ehrId;
+  if (!id) { alert('No EHR ID — run Step 1 first.'); return; }
+  await fhirQuery('/fhir/Patient?identifier=' + encodeURIComponent(id), 's7-patients');
+}
+</script>
+</body>
+</html>

@@ -25,6 +25,20 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.startupDependencies.postgres.enabled }}
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ .Values.startupDependencies.postgres.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -ec
+        - |
+          until pg_isready -h {{ .Values.config.database.host | quote }} -p {{ .Values.config.database.port }} -U {{ .Values.config.database.username | quote }} -q; do
+            echo "Waiting for PostgreSQL at {{ .Values.config.database.host }}:{{ .Values.config.database.port }}..."
+            sleep 3
+          done
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

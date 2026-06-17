@@ -59,11 +59,18 @@ postgres:
     enabled: true
     userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the keycloak PostgreSQL role
 
-  # Backup (disabled by default; configure destinationPath for production)
+  # Backup (disabled by default). For production, enable and point at an
+  # S3-compatible object store. CNPG needs credentials in a Kubernetes Secret
+  # with keys ACCESS_KEY_ID and ACCESS_SECRET_KEY (override key names below).
   backup:
     enabled: false
-    destinationPath: ""  # e.g. s3://my-bucket/postgres-backups
+    destinationPath: ""  # e.g. s3://my-bucket/postgres-backups  CHANGE_ME
     retentionDays: 30
+    # endpointURL: "https://s3.internal.example.org"  # for non-AWS / internal MinIO
+    # s3Credentials:
+    #   secretName: "postgres-backup-s3"   # kubectl create secret generic postgres-backup-s3 ...
+    #   accessKeyIdKey: "ACCESS_KEY_ID"
+    #   secretAccessKeyKey: "ACCESS_SECRET_KEY"
 
 # MongoDB Clusters (for openFHIR)
 mongodb:
@@ -100,12 +107,12 @@ ehrbase:
   
   resources:
     requests:
-      cpu: "CHANGE_ME"  # e.g., "500m"
-      memory: "CHANGE_ME"  # e.g., "1Gi"
+      cpu: "500m"
+      memory: "1Gi"
     limits:
-      cpu: "CHANGE_ME"  # e.g., "2000m"
-      memory: "CHANGE_ME"  # e.g., "4Gi"
-  
+      cpu: "2000m"
+      memory: "4Gi"
+
   # Security: basic auth credentials (inject via Secret in production)
   auth:
     enabled: true
@@ -157,12 +164,12 @@ openfhir:
   
   resources:
     requests:
-      cpu: "CHANGE_ME"
-      memory: "CHANGE_ME"
+      cpu: "500m"
+      memory: "1Gi"
     limits:
-      cpu: "CHANGE_ME"
-      memory: "CHANGE_ME"
-  
+      cpu: "2000m"
+      memory: "2Gi"
+
   # FHIR server configuration
   fhir:
     versions: ["STU3", "R4", "R4B"]  # Supported FHIR versions
@@ -193,7 +200,10 @@ eos:
   replicaCount: 1
   image:
     repository: "ghcr.io/sevkohler/eos"
-    tag: "latest"  # upstream only publishes 'latest'; pin to a digest for production
+    tag: "latest"  # upstream only publishes 'latest'
+    # Pinned by digest for production immutability (overrides tag when set).
+    # Refresh: docker buildx imagetools inspect ghcr.io/sevkohler/eos:latest
+    digest: "sha256:e92baaa035fadb942c57dc7be30de117905ec451fa317d189fc322cc2c3bbd33"
     pullPolicy: "IfNotPresent"
   
   service:
@@ -208,12 +218,12 @@ eos:
   
   resources:
     requests:
-      cpu: "CHANGE_ME"
-      memory: "CHANGE_ME"
+      cpu: "500m"
+      memory: "1Gi"
     limits:
-      cpu: "CHANGE_ME"
-      memory: "CHANGE_ME"
-  
+      cpu: "2000m"
+      memory: "4Gi"
+
   # Database connection (uses PostgreSQL cluster, separate schema/database from EHRbase)
   database:
     host: "postgres-cluster.default.svc.cluster.local"
@@ -239,6 +249,38 @@ eos:
       port: 8080
     initialDelaySeconds: 30
     periodSeconds: 10
+
+# ========== EHRSUCTION ==========
+# EHRsuction exports openEHR compositions from EHRbase to a persistent volume.
+# Deployed as a Kubernetes CronJob. No published image — build with build-images.sh
+# (component: ehrsuction) and push to your registry.
+ehrsuction:
+  enabled: true
+  image:
+    repository: "CHANGE_ME_REGISTRY/ehrsuction"  # CHANGE_ME: your registry/image
+    tag: "ohs"
+    pullPolicy: "IfNotPresent"
+  schedule: "0 3 * * *"   # daily at 03:00
+  suspend: true           # set false to enable scheduled runs
+  backoffLimit: 1
+  config:
+    baseUrl: "http://ohs-ehrbase:8080"  # CHANGE_ME: update service name/namespace if different
+    platform: "EHRBASE"
+    exportType: "CANONICAL"
+    steps: 5000
+    logging:
+      cmdLevel: "info"
+      fileLevel: "debug"
+  auth:
+    username: "ehrbase_user"
+    passwordSecret:
+      name: "ohs-credentials"
+      key: "ehrbase-user-password"
+  output:
+    persistence:
+      enabled: true
+      storage: "5Gi"  # CHANGE_ME: adjust for expected export volume
+      accessMode: ReadWriteOnce
 
 # ========== COHORT EXPLORER ==========
 # Cohort Explorer is a web app to explore/visualize cohorts via openEHR.
@@ -303,7 +345,8 @@ cohort-explorer-backend:
       adminPassword: "CHANGE_ME"  # overridden by ohs-credentials secret
 
     numUrl: "https://ohs.example.org"  # CHANGE_ME: your external URL
-    corsAllowedOrigins: "*"  # CHANGE_ME: restrict in production
+    # Restrict to the frontend origin(s). Comma-separated for multiple.
+    corsAllowedOrigins: "https://ohs.example.org"  # CHANGE_ME: your frontend origin
 
     privacy:
       minHits: 30
@@ -561,19 +604,28 @@ ingress:
       paths:
         - path: "/ehrbase"
           pathType: "Prefix"
-          service: "ehrbase"
+          service: "ohs-ehrbase"
+          port: 8080
         - path: "/openfhir"
           pathType: "Prefix"
-          service: "openfhir"
+          service: "ohs-openfhir"
+          port: 8080
         - path: "/eos"
           pathType: "Prefix"
-          service: "eos"
+          service: "ohs-eos"
+          port: 8081
+        - path: "/auth"
+          pathType: "Prefix"
+          service: "ohs-keycloak"
+          port: 8080
         - path: "/num-portal"
           pathType: "Prefix"
           service: "ohs-cohort-explorer-backend"
+          port: 8090
         - path: "/cohort-explorer"
           pathType: "Prefix"
           service: "ohs-cohort-explorer-frontend"
+          port: 80
 
 # ========== MONITORING & LOGGING (OPTIONAL) ==========
 
@@ -593,8 +645,17 @@ logging:
 
 networkPolicy:
   enabled: true  # Enable NetworkPolicy for production
-  policyTypes:
-    - Ingress
+  # Label value of the OHS namespace (kubectl label namespace <ns> name=<value>).
+  # Defaults to the release namespace name when empty.
+  namespaceLabel: ""
+  # Namespace label of your ingress controller (default assumes ingress-nginx).
+  ingressControllerNamespace: "ingress-nginx"  # CHANGE_ME if different
+  # HTTP ports the ingress controller is allowed to reach on app pods.
+  httpPorts:
+    - 8080  # ehrbase / openfhir / keycloak
+    - 8081  # eos
+    - 8090  # cohort-explorer-backend
+    - 80    # cohort-explorer-frontend / openehrtool-frontend
 
 # ========== SECURITY & RBAC ==========
 

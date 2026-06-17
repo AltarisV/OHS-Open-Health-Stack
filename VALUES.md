@@ -434,10 +434,10 @@ eos:
   
   image:
     repository: string              # Docker image
-                                    # Default: "ghcr.io/SevKohler/Eos"
-    tag: string                     # Image tag (PIN_VERSION)
-                                    # Current: "0.0.62"
-                                    # Check: https://github.com/SevKohler/Eos/releases
+                                    # Default: "ghcr.io/sevkohler/eos"
+    tag: string                     # Image tag — upstream only publishes "latest"
+                                    # Default: "latest" (pin to a digest for production)
+                                    # Workflow: https://github.com/SevKohler/Eos
     pullPolicy: string
   
   service:
@@ -605,13 +605,11 @@ Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_
 
 ### Remaining Staged Components
 
-The following components are still staged and remain `enabled: false` in the base profile.
+EHRsuction, Cohort Explorer, Keycloak, and openEHRTool-v2 are implemented and enabled in the
+base/local profiles — see `values.yaml` and the per-component sections of GETTING_STARTED.md.
+The following components are still staged.
 
 ```yaml
-ehrsuction:
-  enabled: false                    # EHRsuction - Data export tool
-                                    # Implementation pending
-
 csv-to-openeehr:
   enabled: false                    # CSV to openEHR - Bulk import
                                     # Implementation strategy TBD
@@ -669,8 +667,13 @@ ingress:
                                     # Options: "Exact", "Prefix"
                                     # Default: "Prefix"
           
-          service: string           # Target service name
-                                    # Options: "ehrbase", "openfhir", "eos", "opehrtool-v2"
+          service: string           # Target service name (Helm release prefix included)
+                                    # e.g. "ohs-ehrbase", "ohs-openfhir", "ohs-eos",
+                                    # "ohs-keycloak", "ohs-cohort-explorer-backend",
+                                    # "ohs-cohort-explorer-frontend"
+          port: integer             # Target service port
+                                    # ehrbase/openfhir/keycloak 8080, eos 8081,
+                                    # cohort-explorer-backend 8090, frontend 80
 ```
 
 ### Example: Ingress Configuration
@@ -690,15 +693,18 @@ ingress:
   hosts:
     - host: "ohs.hospital.org"
       paths:
-        - path: "/"
+        - path: "/ehrbase"
           pathType: "Prefix"
-          service: "ehrbase"
+          service: "ohs-ehrbase"
+          port: 8080
         - path: "/openfhir"
           pathType: "Prefix"
-          service: "openfhir"
+          service: "ohs-openfhir"
+          port: 8080
         - path: "/eos"
           pathType: "Prefix"
-          service: "eos"
+          service: "ohs-eos"
+          port: 8081
 ```
 
 ---

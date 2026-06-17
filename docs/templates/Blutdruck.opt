@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<template xmlns="openEHR/v1/Template">
+  <id>Blutdruck</id>
+  <name>Blutdruck</name>
+  <description>
+    <lifecycle_state>Initial</lifecycle_state>
+    <details>
+      <purpose>Minimal blood pressure template for OHS end-to-end verification.</purpose>
+      <use>Upload to EHRbase once, then submit compositions using template_id "Blutdruck".</use>
+      <misuse/>
+      <language>
+        <terminology_id>
+          <value>ISO_639-1</value>
+        </terminology_id>
+        <code_string>en</code_string>
+      </language>
+    </details>
+  </description>
+  <definition xsi:type="COMPOSITION" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
+              concept_name="Encounter" maxOccurrences="1"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Content xsi:type="OBSERVATION" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
+             concept_name="Blood Pressure" max="1" path="/content"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0004]" max="1"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0005]" max="1"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1006]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1007]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0033]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1005]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at0008]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1052]" max="0"/>
+      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1043]" max="0"/>
+      <Rule path="/data[at0001]/events[at1042]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at0013]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at0014]" max="0"/>
+      <Rule path="/protocol[at0011]/items[at1010]" max="0"/>
+    </Content>
+  </definition>
+  <!--
+    IMPORTANT: These MD5-CAM-1.0.1 digests are version-specific.
+    They must match the exact archetype versions in EHRbase's internal repository.
+    If EHRbase rejects this OPT with a digest mismatch error, regenerate it using
+    the openEHR ADL Designer (https://tools.openehr.org/designer/) against the
+    same archetype versions your EHRbase instance uses.
+    Values below are from the openEHR CKM public mirror and may not match all EHRbase builds.
+  -->
+  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <digest id="MD5-CAM-1.0.1">10250E3AD051C33DB43D2DA76A272E08</digest>
+  </integrity_checks>
+  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <digest id="MD5-CAM-1.0.1">D9F6C309F70B55A7BA405FB68EE2F28E</digest>
+  </integrity_checks>
+</template>

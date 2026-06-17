@@ -5,7 +5,10 @@ replicaCount: 1  # Eos typically runs as a single instance (batch jobs)
 
 image:
   repository: ghcr.io/sevkohler/eos
-  tag: "latest"  # upstream only publishes 'latest'; pin to a digest for production
+  tag: "latest"  # upstream only publishes 'latest'
+  # Pinned by digest for production immutability (overrides tag when set).
+  # Refresh: docker buildx imagetools inspect ghcr.io/sevkohler/eos:latest
+  digest: "sha256:e92baaa035fadb942c57dc7be30de117905ec451fa317d189fc322cc2c3bbd33"
   pullPolicy: IfNotPresent
 
 nameOverride: ""
@@ -38,6 +41,14 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 80
+
+startupDependencies:
+  postgres:
+    enabled: true
+    image: "postgres:15-alpine"
+  ehrbase:
+    enabled: true
+    image: "busybox:1.36"
 
 # Eos-specific configuration
 config:
@@ -99,9 +110,13 @@ podAnnotations:
 
 podSecurityContext: {}
 
+# Eos (Cloud Native Buildpacks) image runs as non-root user cnb (uid 1002 / gid 1000).
+# Verified serving on :8081 as non-root.
 securityContext:
-  runAsNonRoot: false
-  runAsUser: 0
+  runAsNonRoot: true
+  runAsUser: 1002
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
 
 nodeSelector: {}
 

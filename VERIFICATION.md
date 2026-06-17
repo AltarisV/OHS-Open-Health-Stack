@@ -300,40 +300,119 @@ curl -s -X POST \
   http://localhost:8080/ehrbase/rest/openehr/v1/query/aql | jq .
 ```
 
-### EHRbase — Upload Template and Composition
+### EHRbase — Blood Pressure Template & Composition
+
+Upload the blood pressure Operational Template (OPT) from `docs/templates/Blutdruck.opt`:
 
 ```bash
-# Upload an openEHR template
-# curl -s -X POST \
-#   -H "Authorization: Basic $AUTH" \
-#   -H "Content-Type: application/xml" \
-#   --data-binary @template.opt \
-#   http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4
+curl -s -X POST \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/xml" \
+  --data-binary @docs/templates/Blutdruck.opt \
+  http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4
 
-# Submit a composition
-# curl -s -X POST \
-#   -H "Authorization: Basic $AUTH" \
-#   -H "Content-Type: application/json" \
-#   -H "Prefer: return=representation" \
-#   -d "$COMPOSITION_JSON" \
-#   http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$EHR_ID/composition
+# Verify the template was accepted
+curl -s -H "Authorization: Basic $AUTH" \
+  http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4 | jq '.[]|.template_id'
 ```
+
+> **Known limitation — OPT digest validation:** EHRbase validates the `MD5-CAM-1.0.1`
+> checksums in the OPT against its own internal archetype repository. The values in
+> `docs/templates/Blutdruck.opt` are sourced from the openEHR CKM public mirror but may
+> not match the exact archetype versions bundled with your EHRbase build. If the upload
+> fails with a digest error, regenerate the OPT using the
+> [ADL Designer](https://tools.openehr.org/designer/) — open the archetypes
+> `openEHR-EHR-COMPOSITION.encounter.v1` and `openEHR-EHR-OBSERVATION.blood_pressure.v2`,
+> create a template, and export as OPT 1.4.
+
+Submit a blood pressure composition (120/80 mmHg) into the EHR created above:
+
+```bash
+COMPOSITION=$(cat <<'EOF'
+{
+  "_type": "COMPOSITION",
+  "name": {"_type": "DV_TEXT", "value": "Blutdruck"},
+  "archetype_details": {
+    "_type": "ARCHETYPED",
+    "archetype_id": {"_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.encounter.v1"},
+    "template_id": {"_type": "TEMPLATE_ID", "value": "Blutdruck"},
+    "rm_version": "1.0.2"
+  },
+  "language": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_639-1"}, "code_string": "de"},
+  "territory": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_3166-1"}, "code_string": "DE"},
+  "category": {"_type": "DV_CODED_TEXT", "value": "event", "defining_code": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "openehr"}, "code_string": "433"}},
+  "composer": {"_type": "PARTY_SELF"},
+  "content": [
+    {
+      "_type": "OBSERVATION",
+      "name": {"_type": "DV_TEXT", "value": "Blutdruck"},
+      "archetype_node_id": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+      "language": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_639-1"}, "code_string": "de"},
+      "encoding": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "IANA_character-sets"}, "code_string": "UTF-8"},
+      "subject": {"_type": "PARTY_SELF"},
+      "data": {
+        "_type": "HISTORY",
+        "name": {"_type": "DV_TEXT", "value": "history"},
+        "archetype_node_id": "at0001",
+        "origin": {"_type": "DV_DATE_TIME", "value": "2024-01-15T10:00:00Z"},
+        "events": [{
+          "_type": "POINT_EVENT",
+          "name": {"_type": "DV_TEXT", "value": "any event"},
+          "archetype_node_id": "at0006",
+          "time": {"_type": "DV_DATE_TIME", "value": "2024-01-15T10:00:00Z"},
+          "data": {
+            "_type": "ITEM_TREE",
+            "name": {"_type": "DV_TEXT", "value": "Tree"},
+            "archetype_node_id": "at0003",
+            "items": [
+              {
+                "_type": "ELEMENT",
+                "name": {"_type": "DV_TEXT", "value": "Systolisch"},
+                "archetype_node_id": "at0004",
+                "value": {"_type": "DV_QUANTITY", "magnitude": 120.0, "units": "mm[Hg]", "precision": 0}
+              },
+              {
+                "_type": "ELEMENT",
+                "name": {"_type": "DV_TEXT", "value": "Diastolisch"},
+                "archetype_node_id": "at0005",
+                "value": {"_type": "DV_QUANTITY", "magnitude": 80.0, "units": "mm[Hg]", "precision": 0}
+              }
+            ]
+          }
+        }]
+      }
+    }
+  ]
+}
+EOF
+)
+
+COMP_RESP=$(curl -s -X POST \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d "$COMPOSITION" \
+  http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$EHR_ID/composition)
+
+echo "$COMP_RESP" | jq '.uid.value'
+```
+
+Expected: a composition UID like `<uuid>::localhost::1`.
 
 ### Eos — Convert EHRs to OMOP
 
-```bash
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d '{}' \
-  http://localhost:8082/person
+Trigger EOS to read from EHRbase and write OMOP CDM records.
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d '{}' \
-  http://localhost:8082/ehr
+> **Prerequisite:** Athena vocabularies must be loaded and EOS must be configured with
+> `eos.config.omop.athenaVocabulariesPresent=true`. Without vocabularies, concept mapping
+> is skipped and the `measurement` table stays empty.
+
+```bash
+curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/person
+curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/ehr
 ```
 
-Verify OMOP output:
+Verify OMOP output (port-forward PostgreSQL first: `kubectl port-forward svc/postgres-cluster-rw 5432:5432 -n ohs`):
 
 ```bash
 export PGPASSWORD=$(kubectl get secret postgres-eos-user-secret -n ohs \
@@ -342,6 +421,44 @@ export PGPASSWORD=$(kubectl get secret postgres-eos-user-secret -n ohs \
 psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM person;"
 psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM measurement;"
 ```
+
+Expected after the composition above is processed: `person` count ≥ 1.
+
+### Cohort Explorer — End-to-End
+
+Port-forward all required services (each in a separate terminal):
+
+```bash
+kubectl port-forward svc/ohs-keycloak              8083:8080 -n ohs
+kubectl port-forward svc/ohs-cohort-explorer-backend 8084:8090 -n ohs
+kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80  -n ohs
+```
+
+**Verify backend authentication** (the test user is created automatically from the Keycloak realm import):
+
+```bash
+KC_TOKEN=$(curl -s -X POST \
+  "http://localhost:8083/auth/realms/crr/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password&client_id=num-portal-webapp&username=testuser&password=test123" \
+  | jq -r '.access_token')
+
+echo "Token obtained: ${KC_TOKEN:0:40}..."
+
+curl -s -H "Authorization: Bearer $KC_TOKEN" \
+  http://localhost:8084/num-portal/api/v1/cohort | jq .
+```
+
+Expected: HTTP 200 with a JSON array (empty `[]` on a fresh install).
+
+**Open the UI in the browser:**
+
+```
+http://localhost:8085
+```
+
+Log in with `testuser` / `test123`. After login you land on the Cohort Explorer dashboard.
+To verify the full pipeline: create a new cohort, add a criterion (e.g. Measurement → Blood Pressure Systolic > 0), and execute — the result count should be ≥ 1 if the EOS transformation above completed successfully.
 
 ### openFHIR — FHIR Queries
 

@@ -40,6 +40,11 @@ autoscaling:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
 
+startupDependencies:
+  postgres:
+    enabled: true
+    image: "postgres:15-alpine"
+
 # EHRbase-specific configuration
 config:
   auth:
@@ -92,9 +97,13 @@ podAnnotations:
 
 podSecurityContext: {}
 
+# EHRbase image ships a dedicated non-root user (uid 100 / gid 101).
+# Verified serving the REST API as non-root.
 securityContext:
-  runAsNonRoot: false
-  runAsUser: 0
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 101
+  allowPrivilegeEscalation: false
 
 nodeSelector: {}
 
