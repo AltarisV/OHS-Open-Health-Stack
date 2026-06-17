@@ -111,8 +111,8 @@
   <p class="desc">Set your port-forward addresses and credentials here. Values are stored in memory only and auto-filled into all steps below.</p>
 
   <div class="cors-note">
-    ⚠ Serve this file from a local HTTP server to avoid browser CORS restrictions:<br>
-    <code>python -m http.server 8888 --directory docs/test-ui</code> → open <code>http://localhost:8888</code>
+    ⚠ Serve from a local HTTP server (serve the <code>docs</code> dir so the bundled template/composition load):<br>
+    <code>python -m http.server 8888 --directory docs</code> → open <code>http://localhost:8888/test-ui/</code>
   </div>
 
   <div class="card">
@@ -174,17 +174,17 @@
 <!-- STEP 2: Upload Template -->
 <div class="panel" id="panel-s2">
   <h2>Step 2 — Upload Blood Pressure Template</h2>
-  <p class="desc">Uploads the <code>Blutdruck</code> Operational Template to EHRbase. This only needs to be done once — subsequent uploads of the same template ID are rejected with 409 (that's fine).</p>
+  <p class="desc">Uploads the <code>ehrbase_blood_pressure_simple.de.v0</code> Operational Template to EHRbase. This only needs to be done once — subsequent uploads of the same template ID are rejected with 409 (that's fine).</p>
   <div class="card">
     <h3>Template</h3>
     <div class="fields">
-      <div><label>Template ID</label><input id="s2-template-id" value="Blutdruck" readonly></div>
+      <div><label>Template ID</label><input id="s2-template-id" value="ehrbase_blood_pressure_simple.de.v0" readonly></div>
       <div><label>OPT XML (paste or use bundled)</label>
         <textarea id="s2-opt" rows="6" style="width:100%;background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:monospace;font-size:11px;resize:vertical;" placeholder="Paste OPT XML here, or click 'Use bundled template' below"></textarea>
       </div>
     </div>
     <div class="actions">
-      <button class="secondary" onclick="loadBundledTemplate()">Use bundled Blutdruck.opt</button>
+      <button class="secondary" onclick="loadBundledTemplate()">Load bundled OPT</button>
       <button class="primary" onclick="step2()">Upload Template</button>
       <span class="status" id="s2-status"></span>
     </div>
@@ -417,52 +417,20 @@ async function step1() {
 }
 
 // ── Step 2: Upload Template ────────────────────────────────────────────────
-const BUNDLED_OPT = `<?xml version="1.0" encoding="UTF-8"?>
-<template xmlns="openEHR/v1/Template">
-  <id>Blutdruck</id>
-  <name>Blutdruck</name>
-  <description>
-    <lifecycle_state>Initial</lifecycle_state>
-    <details>
-      <purpose>Minimal blood pressure template for OHS end-to-end verification.</purpose>
-      <use>Upload to EHRbase once, then submit compositions using template_id "Blutdruck".</use>
-      <misuse/>
-      <language><terminology_id><value>ISO_639-1</value></terminology_id><code_string>en</code_string></language>
-    </details>
-  </description>
-  <definition xsi:type="COMPOSITION" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
-              concept_name="Encounter" maxOccurrences="1"
-              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <Content xsi:type="OBSERVATION" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
-             concept_name="Blood Pressure" max="1" path="/content"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0004]" max="1"/>
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0005]" max="1"/>
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1006]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1007]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at0033]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/data[at0003]/items[at1005]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at0008]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1052]" max="0"/>
-      <Rule path="/data[at0001]/events[at0006]/state[at0007]/items[at1043]" max="0"/>
-      <Rule path="/data[at0001]/events[at1042]" max="0"/>
-      <Rule path="/protocol[at0011]/items[at0013]" max="0"/>
-      <Rule path="/protocol[at0011]/items[at0014]" max="0"/>
-      <Rule path="/protocol[at0011]/items[at1010]" max="0"/>
-    </Content>
-  </definition>
-  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-COMPOSITION.encounter.v1"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <digest id="MD5-CAM-1.0.1">10250E3AD051C33DB43D2DA76A272E08</digest>
-  </integrity_checks>
-  <integrity_checks xsi:type="ArchetypeIntegrity" archetype_id="openEHR-EHR-OBSERVATION.blood_pressure.v2"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <digest id="MD5-CAM-1.0.1">D9F6C309F70B55A7BA405FB68EE2F28E</digest>
-  </integrity_checks>
-</template>`;
+// Bundled, EHRbase-verified artifacts live in docs/templates/ (one level up).
+const OPT_URL  = '../templates/ehrbase_blood_pressure_simple.de.v0.opt';
+const COMP_URL = '../templates/ehrbase_blood_pressure_simple.de.v0.json';
 
-function loadBundledTemplate() {
-  document.getElementById('s2-opt').value = BUNDLED_OPT;
+async function loadBundledTemplate() {
+  setStatus('s2-status', 'Loading bundled OPT...', 'running');
+  try {
+    const r = await fetch(OPT_URL);
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' — serve the docs dir (see header note)');
+    document.getElementById('s2-opt').value = await r.text();
+    setStatus('s2-status', '✓ OPT loaded — click Upload', 'ok');
+  } catch(e) {
+    setStatus('s2-status', '✗ ' + e.message, 'err');
+  }
 }
 
 async function step2() {
@@ -502,43 +470,26 @@ async function step3() {
   const dt = val('s3-datetime');
   setStatus('s3-status', 'Submitting...', 'running');
 
-  const body = {
-    _type: 'COMPOSITION',
-    name: { _type: 'DV_TEXT', value: 'Blutdruck' },
-    archetype_details: {
-      _type: 'ARCHETYPED',
-      archetype_id: { _type: 'ARCHETYPE_ID', value: 'openEHR-EHR-COMPOSITION.encounter.v1' },
-      template_id: { _type: 'TEMPLATE_ID', value: 'Blutdruck' },
-      rm_version: '1.0.2'
-    },
-    language: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_639-1' }, code_string: 'de' },
-    territory: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_3166-1' }, code_string: 'DE' },
-    category: { _type: 'DV_CODED_TEXT', value: 'event', defining_code: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'openehr' }, code_string: '433' } },
-    composer: { _type: 'PARTY_SELF' },
-    content: [{
-      _type: 'OBSERVATION',
-      name: { _type: 'DV_TEXT', value: 'Blutdruck' },
-      archetype_node_id: 'openEHR-EHR-OBSERVATION.blood_pressure.v2',
-      language: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'ISO_639-1' }, code_string: 'de' },
-      encoding: { _type: 'CODE_PHRASE', terminology_id: { _type: 'TERMINOLOGY_ID', value: 'IANA_character-sets' }, code_string: 'UTF-8' },
-      subject: { _type: 'PARTY_SELF' },
-      data: {
-        _type: 'HISTORY', name: { _type: 'DV_TEXT', value: 'history' }, archetype_node_id: 'at0001',
-        origin: { _type: 'DV_DATE_TIME', value: dt },
-        events: [{
-          _type: 'POINT_EVENT', name: { _type: 'DV_TEXT', value: 'any event' }, archetype_node_id: 'at0006',
-          time: { _type: 'DV_DATE_TIME', value: dt },
-          data: {
-            _type: 'ITEM_TREE', name: { _type: 'DV_TEXT', value: 'Tree' }, archetype_node_id: 'at0003',
-            items: [
-              { _type: 'ELEMENT', name: { _type: 'DV_TEXT', value: 'Systolisch' }, archetype_node_id: 'at0004', value: { _type: 'DV_QUANTITY', magnitude: sys, units: 'mm[Hg]', precision: 0 } },
-              { _type: 'ELEMENT', name: { _type: 'DV_TEXT', value: 'Diastolisch' }, archetype_node_id: 'at0005', value: { _type: 'DV_QUANTITY', magnitude: dia, units: 'mm[Hg]', precision: 0 } }
-            ]
-          }
-        }]
-      }
-    }]
-  };
+  // Load the bundled, EHRbase-verified canonical composition and set values.
+  let body;
+  try {
+    const cr = await fetch(COMP_URL);
+    if (!cr.ok) throw new Error('HTTP ' + cr.status + ' loading bundled composition — serve the docs dir');
+    body = await cr.json();
+    // Blood pressure items: [0]=systolic, [1]=diastolic (mm[Hg]).
+    const items = body.content[0].data.events[0].data.items;
+    if (!Number.isNaN(sys)) items[0].value.magnitude = sys;
+    if (!Number.isNaN(dia)) items[1].value.magnitude = dia;
+    if (dt) {
+      body.content[0].data.events[0].time.value = dt;
+      if (body.content[0].data.origin) body.content[0].data.origin.value = dt;
+    }
+  } catch(e) {
+    showResp('s3-resp-box', 's3-resp', e.message, false);
+    setStatus('s3-status', '✗ ' + e.message, 'err');
+    markNav('s3', false);
+    return;
+  }
 
   try {
     const r = await apiFetch(cfg('cfg-ehrbase') + '/ehrbase/rest/openehr/v1/ehr/' + ehrId + '/composition', {

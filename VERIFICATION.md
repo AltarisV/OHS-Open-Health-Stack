@@ -302,102 +302,55 @@ curl -s -X POST \
 
 ### EHRbase — Blood Pressure Template & Composition
 
-Upload the blood pressure Operational Template (OPT) from `docs/templates/Blutdruck.opt`:
+This repo bundles a real, verified Operational Template and a matching canonical
+composition (sourced from the EHRbase test suite, template_id
+`ehrbase_blood_pressure_simple.de.v0`):
+
+- `docs/templates/ehrbase_blood_pressure_simple.de.v0.opt` — the flattened OPT
+- `docs/templates/ehrbase_blood_pressure_simple.de.v0.json` — a sample composition
+
+Upload the OPT:
 
 ```bash
 curl -s -X POST \
   -H "Authorization: Basic $AUTH" \
   -H "Content-Type: application/xml" \
-  --data-binary @docs/templates/Blutdruck.opt \
+  --data-binary @docs/templates/ehrbase_blood_pressure_simple.de.v0.opt \
   http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4
 
-# Verify the template was accepted
+# Verify the template was accepted (expect: "ehrbase_blood_pressure_simple.de.v0")
 curl -s -H "Authorization: Basic $AUTH" \
   http://localhost:8080/ehrbase/rest/openehr/v1/definition/template/adl1.4 | jq '.[]|.template_id'
 ```
 
-> **Known limitation — OPT digest validation:** EHRbase validates the `MD5-CAM-1.0.1`
-> checksums in the OPT against its own internal archetype repository. The values in
-> `docs/templates/Blutdruck.opt` are sourced from the openEHR CKM public mirror but may
-> not match the exact archetype versions bundled with your EHRbase build. If the upload
-> fails with a digest error, regenerate the OPT using the
-> [ADL Designer](https://tools.openehr.org/designer/) — open the archetypes
-> `openEHR-EHR-COMPOSITION.encounter.v1` and `openEHR-EHR-OBSERVATION.blood_pressure.v2`,
-> create a template, and export as OPT 1.4.
+Expected upload status: `201 Created`.
 
-Submit a blood pressure composition (120/80 mmHg) into the EHR created above:
+Submit the bundled composition into the EHR created above:
 
 ```bash
-COMPOSITION=$(cat <<'EOF'
-{
-  "_type": "COMPOSITION",
-  "name": {"_type": "DV_TEXT", "value": "Blutdruck"},
-  "archetype_details": {
-    "_type": "ARCHETYPED",
-    "archetype_id": {"_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.encounter.v1"},
-    "template_id": {"_type": "TEMPLATE_ID", "value": "Blutdruck"},
-    "rm_version": "1.0.2"
-  },
-  "language": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_639-1"}, "code_string": "de"},
-  "territory": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_3166-1"}, "code_string": "DE"},
-  "category": {"_type": "DV_CODED_TEXT", "value": "event", "defining_code": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "openehr"}, "code_string": "433"}},
-  "composer": {"_type": "PARTY_SELF"},
-  "content": [
-    {
-      "_type": "OBSERVATION",
-      "name": {"_type": "DV_TEXT", "value": "Blutdruck"},
-      "archetype_node_id": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
-      "language": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "ISO_639-1"}, "code_string": "de"},
-      "encoding": {"_type": "CODE_PHRASE", "terminology_id": {"_type": "TERMINOLOGY_ID", "value": "IANA_character-sets"}, "code_string": "UTF-8"},
-      "subject": {"_type": "PARTY_SELF"},
-      "data": {
-        "_type": "HISTORY",
-        "name": {"_type": "DV_TEXT", "value": "history"},
-        "archetype_node_id": "at0001",
-        "origin": {"_type": "DV_DATE_TIME", "value": "2024-01-15T10:00:00Z"},
-        "events": [{
-          "_type": "POINT_EVENT",
-          "name": {"_type": "DV_TEXT", "value": "any event"},
-          "archetype_node_id": "at0006",
-          "time": {"_type": "DV_DATE_TIME", "value": "2024-01-15T10:00:00Z"},
-          "data": {
-            "_type": "ITEM_TREE",
-            "name": {"_type": "DV_TEXT", "value": "Tree"},
-            "archetype_node_id": "at0003",
-            "items": [
-              {
-                "_type": "ELEMENT",
-                "name": {"_type": "DV_TEXT", "value": "Systolisch"},
-                "archetype_node_id": "at0004",
-                "value": {"_type": "DV_QUANTITY", "magnitude": 120.0, "units": "mm[Hg]", "precision": 0}
-              },
-              {
-                "_type": "ELEMENT",
-                "name": {"_type": "DV_TEXT", "value": "Diastolisch"},
-                "archetype_node_id": "at0005",
-                "value": {"_type": "DV_QUANTITY", "magnitude": 80.0, "units": "mm[Hg]", "precision": 0}
-              }
-            ]
-          }
-        }]
-      }
-    }
-  ]
-}
-EOF
-)
-
 COMP_RESP=$(curl -s -X POST \
   -H "Authorization: Basic $AUTH" \
   -H "Content-Type: application/json" \
   -H "Prefer: return=representation" \
-  -d "$COMPOSITION" \
+  --data-binary @docs/templates/ehrbase_blood_pressure_simple.de.v0.json \
   http://localhost:8080/ehrbase/rest/openehr/v1/ehr/$EHR_ID/composition)
 
 echo "$COMP_RESP" | jq '.uid.value'
 ```
 
-Expected: a composition UID like `<uuid>::localhost::1`.
+Expected: a composition UID like `<uuid>::local.ehrbase.org::1`.
+
+Confirm it is stored and queryable via AQL:
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Basic $AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{"q":"SELECT COUNT(c) FROM EHR e CONTAINS COMPOSITION c WHERE c/archetype_details/template_id/value = '"'"'ehrbase_blood_pressure_simple.de.v0'"'"'"}' \
+  http://localhost:8080/ehrbase/rest/openehr/v1/query/aql | jq '.rows'
+```
+
+Expected: `[[1]]` (or higher if you submit more than once).
 
 ### Eos — Convert EHRs to OMOP
 
