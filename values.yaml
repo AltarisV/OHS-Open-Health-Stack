@@ -11,9 +11,11 @@ global:
   # Shared image pull policy
   imagePullPolicy: "IfNotPresent"  # Options: Always, IfNotPresent, Never
   
-  # Pod security context (applied globally if not overridden)
+  # Intended baseline pod security context. NOTE: not currently wired into the
+  # subchart templates — actual enforcement is the per-workload securityContext
+  # in each chart's values (all workloads run non-root). Kept as the declared intent.
   podSecurityContext:
-    runAsNonRoot: false  # CHANGE_ME: enable for production
+    runAsNonRoot: true
     fsGroup: 1000
 
 # Database Operators
@@ -387,7 +389,7 @@ cohort-explorer-frontend:
   service:
     type: "ClusterIP"
     port: 80
-    targetPort: 80
+    targetPort: 8080  # nginx-unprivileged listens on 8080 (non-root)
 
   ingress:
     enabled: true
@@ -571,7 +573,7 @@ openehrtool-frontend:
   service:
     type: "ClusterIP"
     port: 80
-    targetPort: 80
+    targetPort: 8080  # nginx-unprivileged listens on 8080 (non-root)
   ingress:
     enabled: true
     className: ""

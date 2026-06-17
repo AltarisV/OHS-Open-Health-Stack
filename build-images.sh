@@ -110,6 +110,13 @@ if should_build "cohort-explorer-frontend"; then
   # Upstream Dockerfile pins node:20.14-alpine; Angular CLI now requires >=20.19.
   sed -i 's|node:20\.14-alpine|node:22-alpine|g' "$WORKDIR/cohort-explorer-frontend/Dockerfile"
 
+  # Run as non-root: switch the runtime stage to nginx-unprivileged (uid 101) and
+  # serve on 8080 (non-root cannot bind <1024). pid moves to a writable path.
+  sed -i 's|FROM nginx:1\.25-alpine|FROM nginxinc/nginx-unprivileged:1.25-alpine|' "$WORKDIR/cohort-explorer-frontend/Dockerfile"
+  sed -i 's|listen 80;|listen 8080;|' "$WORKDIR/cohort-explorer-frontend/nginx.conf"
+  grep -q 'pid /tmp/nginx.pid;' "$WORKDIR/cohort-explorer-frontend/nginx.conf" \
+    || sed -i '1i pid /tmp/nginx.pid;' "$WORKDIR/cohort-explorer-frontend/nginx.conf"
+
   build_and_push "cohort-explorer-frontend" "$WORKDIR/cohort-explorer-frontend" \
     --build-arg ENVIRONMENT=deploy
 fi
@@ -203,6 +210,13 @@ if should_build "openehrtool-frontend"; then
     git clone --depth 1 https://github.com/crs4/openEHRTool-v2 \
       "$WORKDIR/openEHRTool-v2"
   fi
+
+  # Run as non-root: switch the runtime stage to nginx-unprivileged (uid 101) and
+  # serve on 8080 (non-root cannot bind <1024). The base image's stock nginx.conf
+  # already points pid/logs at writable paths; only the server block needs the port.
+  sed -i 's|FROM nginx:1\.28\.0-alpine|FROM nginxinc/nginx-unprivileged:1.28.0-alpine|' "$WORKDIR/openEHRTool-v2/frontend-vue/Dockerfile"
+  sed -i 's|EXPOSE 80|EXPOSE 8080|' "$WORKDIR/openEHRTool-v2/frontend-vue/Dockerfile"
+  sed -i 's|listen 80;|listen 8080;|' "$WORKDIR/openEHRTool-v2/frontend-vue/nginx.conf"
 
   build_and_push "openehrtool-frontend" \
     "$WORKDIR/openEHRTool-v2/frontend-vue" \

@@ -29,7 +29,7 @@ fullnameOverride: ""
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
+  targetPort: 8080  # nginx-unprivileged listens on 8080 (non-root)
   annotations: {}
 
 ingress:
@@ -56,7 +56,12 @@ autoscaling:
 
 podAnnotations: {}
 podSecurityContext: {}
-securityContext: {}
+# nginx-unprivileged image runs as uid 101 and serves on 8080.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  allowPrivilegeEscalation: false
 nodeSelector: {}
 affinity: {}
 
@@ -64,7 +69,7 @@ livenessProbe:
   enabled: true
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 10
   periodSeconds: 20
   timeoutSeconds: 5
@@ -74,7 +79,7 @@ readinessProbe:
   enabled: true
   httpGet:
     path: /
-    port: 80
+    port: 8080
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5
