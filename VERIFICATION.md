@@ -80,8 +80,8 @@ curl -s -X POST \
   -d '{"q":"SELECT e/ehr_id/value FROM EHR e"}' \
   http://localhost:8080/ehrbase/rest/openehr/v1/query/aql | jq .
 
-# openFHIR
-curl -s http://localhost:8081/actuator/health || true
+# openFHIR: health endpoint returns 200 "UP" (no actuator; context path is "/")
+curl -s http://localhost:8081/health; echo
 
 # Eos: GET should return 405 because /person is POST-only
 curl -o /dev/null -w "%{http_code}\n" http://localhost:8082/person
@@ -413,11 +413,33 @@ http://localhost:8085
 Log in with `testuser` / `test123`. After login you land on the Cohort Explorer dashboard.
 To verify the full pipeline: create a new cohort, add a criterion (e.g. Measurement → Blood Pressure Systolic > 0), and execute — the result count should be ≥ 1 if the EOS transformation above completed successfully.
 
-### openFHIR — FHIR Queries
+### openFHIR — Health & Mapping Engine
+
+openFHIR is a FHIRConnect **mapping engine** (openEHR ⇄ FHIR), not a FHIR REST server — there is
+no `/fhir/Patient` resource API. Verify it is up and that its endpoints respond:
 
 ```bash
-curl -s http://localhost:8081/fhir/Patient | jq .
-curl -s "http://localhost:8081/fhir/Patient?identifier=$EHR_ID" | jq .
+# Liveness — returns 200 "UP"
+curl -s http://localhost:8081/health; echo
+
+# List configured FhirConnect model mappings (empty until mappings are loaded)
+curl -s http://localhost:8081/fc/model | head -c 400; echo
+```
+
+Conversion endpoints (require a FhirConnect model + Operational Template to be loaded first):
+
+```bash
+# Upload an Operational Template
+# curl -s -X POST -H "Content-Type: application/xml" \
+#   --data-binary @your-template.opt http://localhost:8081/opt
+
+# Convert an openEHR composition to FHIR
+# curl -s -X POST -H "Content-Type: application/json" \
+#   --data-binary @composition.json http://localhost:8081/openfhir/tofhir | jq .
+
+# Convert a FHIR resource to an openEHR composition
+# curl -s -X POST -H "Content-Type: application/json" \
+#   --data-binary @resource.json http://localhost:8081/openfhir/toopenehr | jq .
 ```
 
 ---

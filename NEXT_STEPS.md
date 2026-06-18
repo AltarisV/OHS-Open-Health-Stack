@@ -2,11 +2,41 @@
 
 ## Immediate: Complete Deployment
 
-- [ ] Replace all `CHANGE_ME` placeholders in `values.yaml`
-- [ ] Create `ohs-credentials` secret (see [SECRETS.md](SECRETS.md))
-- [ ] Install operators (CloudNativePG, MongoDB -- see [DEPLOYMENT.md](DEPLOYMENT.md))
-- [ ] `helm install ohs . -f values.yaml -n ohs`
-- [ ] Follow [VERIFICATION.md](VERIFICATION.md) to confirm all services are healthy
+Core local/dev deployment is done — `.env` is populated, secrets are derived from it, and
+the stack installs and passes e2e verification:
+
+- [x] All secret/password values supplied via `.env` (`ohs-credentials` + the `postgres-*`/`mongodb-*`
+      secrets are built from it by `create-secret.sh` — passwords are **never** read from `values.yaml`)
+- [x] Create `ohs-credentials` secret (see [SECRETS.md](SECRETS.md))
+- [x] Install operators (CloudNativePG, MongoDB -- see [DEPLOYMENT.md](DEPLOYMENT.md))
+- [x] `helm install ohs . -f values.yaml -n ohs`
+- [x] Follow [VERIFICATION.md](VERIFICATION.md) to confirm all services are healthy
+
+Remaining `CHANGE_ME` markers in `values.yaml` are **not secrets** — they are environment-specific
+config (domain/hostnames, TLS issuer, image registries, storage sizes, namespace, OMOP vocab flag,
+backup path). They are tracked in the section below.
+
+## Before Internal-Cloud Deployment (egress / external-internal access)
+
+Environment-specific config that needs your real cluster/domain values — not code:
+
+- [ ] Set the real domain/hostnames (replaces `ohs.example.org`) in `ingress.hosts`,
+      `keycloak.config.hostname`/`hostnameUrl`, `cohort-explorer-*` `numUrl`/`api.baseUrl`/`auth.baseUrl`,
+      and `corsAllowedOrigins`
+- [ ] Configure the TLS issuer for the internal CA (the default `letsencrypt-prod` only works internet-facing)
+- [ ] Choose a secrets backend for production (Sealed Secrets / ESO / SOPS — see [SECRETS.md](SECRETS.md))
+- [ ] Load OMOP Athena vocabularies into `eos_omop` (use `load-vocab.sh`), then **restart the Eos pod**
+      so it picks up the populated CONCEPT/VOCABULARY tables. Without them, EOS concept mapping is
+      skipped and `measurement` stays empty.
+      **Note:** `eos.config.omop.athenaVocabulariesPresent` is informational only — upstream Eos has no
+      runtime toggle for it (it reads the vocab tables directly from the DB), so the flag does not
+      gate anything. Loading the tables + restarting the pod is the actual mechanism.
+- [ ] EHRsuction runs with `verify=False` (TLS verification off) — wire in the internal CA bundle
+      before exporting over internal HTTPS
+- [ ] Rebuild `openehrtool-frontend` with the internal backend hostname (`OPENEHRTOOL_BACKEND_HOSTNAME`)
+      — it is baked into the JS bundle at build time
+- [ ] Confirm the OHS namespace is labelled `name=<namespace>` so the NetworkPolicy `allow-internal`
+      rule matches (required once `networkPolicy.enabled: true`)
 
 ## Roadmap
 
@@ -18,7 +48,7 @@
 | 11 | Data mirroring from BETTER Platform to EHRbase | PENDING |
 | 12 | Cohort Explorer (num-portal backend + Angular frontend) | COMPLETE |
 | 13 | CSV-to-openEHR bulk import | PENDING |
-| 14 | Production hardening (backups, TLS, monitoring, secrets rotation) | PENDING |
+| 14 | Production hardening (non-root, NetworkPolicy, CORS, backup wiring, digest pin done; monitoring + secrets rotation + real TLS/domain remaining) | IN PROGRESS |
 
 ## Priority Order
 

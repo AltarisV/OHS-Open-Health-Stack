@@ -60,7 +60,6 @@ skills-lock.json
 .agents/
 
 # Local development overrides
-values-local.yaml
 values-dev.yaml
 
 # Generated files from helm template (for testing)

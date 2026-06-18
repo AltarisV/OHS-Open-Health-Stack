@@ -49,17 +49,17 @@ postgres:
     storage: "50Gi"  # CHANGE_ME: OMOP CDM requires more space; PIN_VERSION for production
     walStorage: "5Gi"
     instances: 2
-    userPassword: ""  # CHANGE_ME: password for the eos PostgreSQL role
+    # Role password is injected via the postgres-eos-user-secret (set EOS_DB_PASSWORD in .env, applied by create-secret.sh).
 
   # Cohort Explorer Backend database (numportal schema, shared postgres-cluster)
   numportal:
     enabled: true
-    userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the numportal PostgreSQL role
+    # Role password is injected via the postgres-numportal-user-secret (set NUMPORTAL_DB_PASSWORD in .env).
 
   # Keycloak database (shared postgres-cluster)
   keycloak:
     enabled: true
-    userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the keycloak PostgreSQL role
+    # Role password is injected via the postgres-keycloak-user-secret (set KEYCLOAK_DB_PASSWORD in .env).
 
   # Backup (disabled by default). For production, enable and point at an
   # S3-compatible object store. CNPG needs credentials in a Kubernetes Secret
@@ -81,8 +81,8 @@ mongodb:
     enabled: true
     storage: "20Gi"  # CHANGE_ME
     replicas: 3
-    rootPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: inject via Kubernetes Secret in production
-    userPassword: "CHANGE_ME_SECURE_PASSWORD"  # CHANGE_ME: password for the openfhir MongoDB user
+    # Root password is injected via the mongodb-root-password secret (set MONGODB_ROOT_PASSWORD in .env).
+    # openfhir user password is injected via the mongodb-openfhir-password secret (set OPENFHIR_MONGO_PASSWORD in .env).
     persistence:
       enabled: true
 
@@ -115,21 +115,26 @@ ehrbase:
       cpu: "2000m"
       memory: "4Gi"
 
-  # Security: basic auth credentials (inject via Secret in production)
-  auth:
-    enabled: true
-    username: "ehrbase_user"  # CHANGE_ME
-    password: "CHANGE_ME_SECURE_PASSWORD"
-    type: "BASIC"  # Options: BASIC, OAUTH2
-  
-  # Database connection (uses PostgreSQL cluster created above)
-  database:
-    host: "postgres-cluster.default.svc.cluster.local"  # CHANGE_ME: update namespace if different
-    port: 5432
-    name: "ehrbase"
-    username: "ehrbase"
-    password: "CHANGE_ME_DATABASE_PASSWORD"  # Inject via Secret
-  
+  # Application config. These keys MUST live under `config:` — that is the schema the
+  # ehrbase subchart reads (.Values.config.*). Keys placed directly under `ehrbase:` are ignored.
+  config:
+    # Security: basic auth credentials.
+    # Password is injected via the ohs-credentials secret, key ehrbase-user-password
+    # (set EHRBASE_USER_PASSWORD in .env, applied by create-secret.sh).
+    auth:
+      enabled: true
+      username: "ehrbase_user"
+      type: "BASIC"  # Options: BASIC, OAUTH2
+
+    # Database connection — CloudNativePG read-write service in this namespace.
+    # Credentials are injected via the postgres-cluster-app secret
+    # (set EHRBASE_DB_PASSWORD in .env, applied by create-secret.sh).
+    database:
+      host: "postgres-cluster-rw.ohs.svc.cluster.local"  # CHANGE_ME: update namespace if not 'ohs'
+      port: 5432
+      name: "ehrbase"
+      username: "ehrbase"
+
   # Probes
   livenessProbe:
     httpGet:
@@ -172,21 +177,21 @@ openfhir:
       cpu: "2000m"
       memory: "2Gi"
 
-  # FHIR server configuration
-  fhir:
-    versions: ["STU3", "R4", "R4B"]  # Supported FHIR versions
-  
-  # Database connection (uses MongoDB cluster created above)
-  database:
-    mongoUri: "mongodb://openfhir:CHANGE_ME_PASSWORD@mongodb-cluster.default.svc.cluster.local:27017/openfhir"  # CHANGE_ME: inject via Secret
-  
-  # EHRbase integration (for bidirectional sync)
-  ehrbaseIntegration:
-    enabled: true
-    baseUrl: "http://ehrbase.default.svc.cluster.local:8080"  # CHANGE_ME: update namespace
-    username: "ehrbase_user"
-    password: "CHANGE_ME_SECURE_PASSWORD"
-  
+  # Application config. These keys MUST live under `config:` — that is the schema the
+  # openfhir subchart reads (.Values.config.*). Keys placed directly under `openfhir:` are ignored.
+  config:
+    # FHIR server configuration
+    fhir:
+      versions: ["STU3", "R4", "R4B"]  # Supported FHIR versions
+
+    # EHRbase integration (for bidirectional sync).
+    # The MongoDB connection URI and the EHRbase password are injected at runtime via the
+    # ohs-credentials secret (keys openfhir-mongo-uri / ehrbase-user-password).
+    ehrbase:
+      enabled: true
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"  # CHANGE_ME: update namespace if not 'ohs'
+      username: "ehrbase_user"
+
   livenessProbe:
     httpGet:
       path: "/health"
@@ -226,25 +231,34 @@ eos:
       cpu: "2000m"
       memory: "4Gi"
 
-  # Database connection (uses PostgreSQL cluster, separate schema/database from EHRbase)
-  database:
-    host: "postgres-cluster.default.svc.cluster.local"
-    port: 5432
-    name: "eos_omop"  # OMOP CDM schema here
-    username: "eos"
-    password: "CHANGE_ME_DATABASE_PASSWORD"
-  
-  # EHRbase integration
-  ehrbase:
-    baseUrl: "http://ehrbase.default.svc.cluster.local:8080"
-    username: "ehrbase_user"
-    password: "CHANGE_ME_SECURE_PASSWORD"
-  
-  # OMOP vocabularies and mapping files
-  omop:
-    athenaVocabulariesPresent: false  # CHANGE_ME: must be true for production; vocabularies should be pre-loaded in database
-    mappingFiles: "CHANGE_ME_REFERENCE_MAPPINGS"
-  
+  # Application config. These keys MUST live under `config:` — that is the schema the
+  # eos subchart reads (.Values.config.*). Keys placed directly under `eos:` are ignored.
+  config:
+    # Database connection — separate OMOP schema/database on the shared PostgreSQL cluster.
+    # Password is injected via the postgres-eos-user-secret (set EOS_DB_PASSWORD in .env).
+    database:
+      host: "postgres-cluster-rw.ohs.svc.cluster.local"  # CHANGE_ME: update namespace if not 'ohs'
+      port: 5432
+      name: "eos_omop"  # OMOP CDM schema here
+      username: "eos"
+
+    # EHRbase integration.
+    # Password is injected via the ohs-credentials secret, key ehrbase-user-password.
+    ehrbase:
+      enabled: true
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"  # CHANGE_ME: update namespace if not 'ohs'
+      username: "ehrbase_user"
+
+    # OMOP vocabularies and concept-mapping files.
+    # NOTE: athenaVocabulariesPresent is informational only. Upstream Eos has NO runtime
+    # toggle for it (verified against its application.yml + source) — Eos reads the OMOP
+    # vocabulary tables straight from the DB. The real requirement is to load the ATHENA
+    # vocabularies into eos_omop (use load-vocab.sh) and restart the Eos pod so it picks
+    # them up. This key has no effect on the container; it just documents the DB state.
+    omop:
+      athenaVocabulariesPresent: false  # documentation flag only — see note above
+      mappingFilesPath: "/app/mappings"  # ConfigMap-mounted path read by Eos
+
   livenessProbe:
     httpGet:
       path: "/health"
