@@ -20,7 +20,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 
 ## Quick Start
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Docker Desktop setup.
+See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Docker Desktop setup.
 
 Standard Kubernetes deployment:
 
@@ -57,14 +57,14 @@ kubectl get pods -n ohs -w
 
 | File                                     | Contents                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------- |
-| [GETTING_STARTED.md](GETTING_STARTED.md) | Quick start, local setup, image builds, port-forwarding, common operations |
-| [DEPLOYMENT.md](DEPLOYMENT.md)           | Full deployment guide and production notes                                 |
-| [VERIFICATION.md](VERIFICATION.md)       | Health checks and end-to-end testing workflow                              |
-| [ARCHITECTURE.md](ARCHITECTURE.md)       | Component overview, data flows, and design decisions                       |
-| [SECRETS.md](SECRETS.md)                 | Secret management with kubectl, Sealed Secrets, ESO, and SOPS              |
-| [VALUES.md](VALUES.md)                   | Helm values reference                                                      |
-| [NEXT_STEPS.md](NEXT_STEPS.md)           | Roadmap and future phases                                                  |
-| [REQUIREMENTS.md](REQUIREMENTS.md)       | Original requirements and architectural constraints                        |
+| [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Quick start, local setup, image builds, port-forwarding, common operations |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md)           | Full deployment guide and production notes                                 |
+| [VERIFICATION.md](docs/VERIFICATION.md)       | Health checks and end-to-end testing workflow                              |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md)       | Component overview, data flows, and design decisions                       |
+| [SECRETS.md](docs/SECRETS.md)                 | Secret management with kubectl, Sealed Secrets, ESO, and SOPS              |
+| [VALUES.md](docs/VALUES.md)                   | Helm values reference                                                      |
+| [NEXT_STEPS.md](docs/NEXT_STEPS.md)           | Roadmap and future phases                                                  |
+| [REQUIREMENTS.md](docs/REQUIREMENTS.md)       | Original requirements and architectural constraints                        |
 
 ## Project Structure
 
@@ -100,7 +100,7 @@ OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push
 ```
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for per-component builds and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
+See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for per-component builds and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
 
 ## EHRsuction Export Job
 
