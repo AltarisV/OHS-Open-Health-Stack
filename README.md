@@ -31,6 +31,7 @@ flowchart TB
         ehrbase["EHRbase<br/>openEHR EHR store"]:::app
         openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
         eos["Eos<br/>openEHR → OMOP ETL"]:::app
+        cohort["Cohort Explorer<br/>OMOP query UI"]:::app
     end
 
     subgraph data["Data stores"]
@@ -39,12 +40,16 @@ flowchart TB
         pg_omop[("PostgreSQL<br/>eos_omop DB<br/>OMOP CDM")]:::db
     end
 
+    analyst["Researcher"]:::ext
+
     src -->|"REST: create EHR / compositions"| ehrbase
     ehrbase --> pg_ehr
     openfhir -->|"reads compositions"| ehrbase
     openfhir -->|"FHIR resources"| mongo
     eos -->|"reads compositions"| ehrbase
     eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+    cohort -->|"OMOP queries"| pg_omop
+    analyst -->|"explore cohorts"| cohort
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
