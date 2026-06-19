@@ -58,14 +58,16 @@ config:
       - R4
       - R4B
   
-  # MongoDB database configuration
+  # MongoDB database configuration.
+  # In practice this is injected from ohs-credentials/openfhir-mongo-uri (see SECRETS.md);
+  # the fallback below assumes the release is installed in namespace 'ohs'.
   database:
-    mongoUri: "mongodb://openfhir:CHANGE_ME_PASSWORD@mongodb-cluster.default.svc.cluster.local:27017/openfhir"
-  
+    mongoUri: "mongodb://openfhir:CHANGE_ME_PASSWORD@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir"
+
   # Integration with EHRbase
   ehrbase:
     enabled: true
-    baseUrl: http://ehrbase.default.svc.cluster.local:8080
+    baseUrl: http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase
     username: ehrbase_user
     password: CHANGE_ME_SECURE_PASSWORD  # Inject via Secret
   

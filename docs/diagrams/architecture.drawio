@@ -241,8 +241,11 @@
         <mxCell id="pgomop" value="eos_omop DB&#10;OMOP CDM" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e6f2e6;strokeColor=#4f8a4f;" vertex="1" parent="1">
           <mxGeometry x="680" y="240" width="130" height="70" as="geometry" />
         </mxCell>
+        <mxCell id="omoptools" value="External OMOP /&#10;OHDSI tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#777777;" vertex="1" parent="1">
+          <mxGeometry x="680" y="340" width="130" height="50" as="geometry" />
+        </mxCell>
 
-        <mxCell id="anaBox" value="3 · Analyse" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#3b6ea5;dashed=1;fontStyle=1;fontColor=#3b6ea5;" vertex="1" parent="1">
+        <mxCell id="anaBox" value="3 · Analyse (openEHR / AQL)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#3b6ea5;dashed=1;fontStyle=1;fontColor=#3b6ea5;" vertex="1" parent="1">
           <mxGeometry x="880" y="200" width="250" height="200" as="geometry" />
         </mxCell>
         <mxCell id="cebe" value="Cohort Explorer BE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3effa;strokeColor=#3b6ea5;" vertex="1" parent="1">
@@ -276,7 +279,10 @@
         <mxCell id="f7" value="PERSON, MEASUREMENT,&#10;OBSERVATION ..." style="endArrow=block;html=1;fontSize=10;strokeColor=#333333;" edge="1" parent="1" source="eos" target="pgomop">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="f8" value="OMOP queries" style="endArrow=block;html=1;fontSize=10;strokeColor=#333333;" edge="1" parent="1" source="pgomop" target="cebe">
+        <mxCell id="f8" value="AQL queries" style="endArrow=block;html=1;fontSize=10;strokeColor=#333333;" edge="1" parent="1" source="cebe" target="ehrbase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f8b" value="external use" style="endArrow=open;html=1;dashed=1;fontSize=10;strokeColor=#777777;" edge="1" parent="1" source="pgomop" target="omoptools">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="f9" style="endArrow=block;html=1;strokeColor=#333333;" edge="1" parent="1" source="cebe" target="cefe">
@@ -286,7 +292,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="title3" value="OHS - end-to-end data flow: openEHR → FHIR / OMOP CDM → cohort" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
+        <mxCell id="title3" value="OHS - end-to-end data flow: openEHR hub, AQL cohorts, FHIR/OMOP exports" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
           <mxGeometry x="20" y="430" width="600" height="20" as="geometry" />
         </mxCell>
       </root>

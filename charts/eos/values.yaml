@@ -54,16 +54,16 @@ startupDependencies:
 config:
   # PostgreSQL database configuration
   database:
-    host: postgres-cluster.default.svc.cluster.local
+    host: postgres-cluster-rw.ohs.svc.cluster.local  # CNPG read-write endpoint; update namespace if not 'ohs'
     port: 5432
     name: eos_omop  # OMOP CDM schema
     username: eos
     password: CHANGE_ME_DATABASE_PASSWORD  # Inject via Secret
-  
+
   # EHRbase integration
   ehrbase:
     enabled: true
-    baseUrl: http://ehrbase.default.svc.cluster.local:8080
+    baseUrl: http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase/
     username: ehrbase_user
     password: CHANGE_ME_SECURE_PASSWORD  # Inject via Secret
   

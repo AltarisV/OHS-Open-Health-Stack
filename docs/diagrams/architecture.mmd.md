@@ -33,7 +33,7 @@ flowchart TB
         ehrbase["EHRbase<br/>openEHR EHR store"]:::app
         openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
         eos["Eos<br/>openEHR → OMOP ETL"]:::app
-        cohort["Cohort Explorer<br/>OMOP query UI"]:::app
+        cohort["Cohort Explorer<br/>openEHR / AQL cohort UI"]:::app
     end
 
     subgraph data["Data stores"]
@@ -43,6 +43,7 @@ flowchart TB
     end
 
     analyst["Researcher"]:::ext
+    omoptools["External OMOP /<br/>OHDSI analytics tools"]:::ext
 
     src -->|"REST: create EHR / compositions"| ehrbase
     ehrbase --> pg_ehr
@@ -50,8 +51,9 @@ flowchart TB
     openfhir -->|"FHIR resources"| mongo
     eos -->|"reads compositions"| ehrbase
     eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
-    cohort -->|"OMOP queries"| pg_omop
-    analyst -->|"explore cohorts"| cohort
+    cohort -->|"AQL queries"| ehrbase
+    analyst -->|"define / run cohorts"| cohort
+    pg_omop -.->|"OMOP CDM (external use)"| omoptools
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
@@ -139,8 +141,10 @@ flowchart TB
 
 ## End-to-end data flow (single record)
 
-Traces one clinical record from ingestion through to the analytics UI, crossing
-the three data models the stack bridges: **openEHR → FHIR / OMOP CDM → cohort**.
+Traces one clinical record from ingestion to use. openEHR in EHRbase is the hub:
+the **Cohort Explorer** queries it directly via AQL, while **openFHIR** (FHIR) and
+**Eos** (OMOP CDM) produce parallel representations for interoperability and external
+analytics.
 
 ```mermaid
 flowchart LR
@@ -152,14 +156,15 @@ flowchart LR
         pg_ehr[("ehrbase DB")]:::db
     end
 
-    subgraph transform["2 · Transform"]
+    subgraph export["2 · Transform / Export"]
         openfhir["openFHIR<br/>→ FHIR R4"]:::app
         eos["Eos<br/>→ OMOP CDM"]:::app
         mongo[("MongoDB<br/>FHIR cache")]:::db
         pg_omop[("eos_omop DB<br/>OMOP CDM")]:::db
+        omoptools["External OMOP /<br/>OHDSI tools"]:::ext
     end
 
-    subgraph analyse["3 · Analyse"]
+    subgraph analyse["3 · Analyse (openEHR / AQL)"]
         ce_be["Cohort Explorer BE"]:::app
         ce_fe["Cohort Explorer FE"]:::app
         analyst["Researcher"]:::ext
@@ -173,10 +178,12 @@ flowchart LR
     ehrbase -->|"compositions"| eos
     openfhir --> mongo
     eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+    pg_omop -.->|"external use"| omoptools
 
-    pg_omop -->|"OMOP queries"| ce_be
-    ce_be --> ce_fe
-    ce_fe -->|"cohorts / counts"| analyst
+    ce_be -->|"AQL queries"| ehrbase
+    ce_fe --> ce_be
+    ce_be -->|"cohorts / counts"| ce_fe
+    ce_fe --> analyst
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;

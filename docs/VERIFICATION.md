@@ -412,7 +412,10 @@ http://localhost:8085
 ```
 
 Log in with `testuser` / `test123`. After login you land on the Cohort Explorer dashboard.
-To verify the full pipeline: create a new cohort, add a criterion (e.g. Measurement → Blood Pressure Systolic > 0), and execute - the result count should be ≥ 1 if the EOS transformation above completed successfully.
+The Cohort Explorer (NUM num-portal) queries **EHRbase via AQL** — it does not read the OMOP CDM.
+To verify the full pipeline: create a new cohort, add a criterion matching the blood pressure
+archetype, and execute - the result count should be ≥ 1 if the composition was stored in EHRbase
+(the EHRbase step above). It does **not** depend on the Eos/OMOP transformation.
 
 ### openFHIR - Health & Mapping Engine
 

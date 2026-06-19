@@ -17,7 +17,7 @@ The catalogue below tracks the in-cluster components plus the external systems t
 | 3 | Eos | ETL from openEHR to OMOP CDM | Active |
 | 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Active |
 | 5 | EHRsuction | Data export tool (CronJob) | Active |
-| 6 | Cohort Explorer | OMOP CDM query UI | Active |
+| 6 | Cohort Explorer | openEHR / AQL cohort query UI (NUM num-portal) | Active |
 | 7 | CSV-to-openEHR | Bulk import from CSV | Placeholder |
 | 8 | BETTER Platform | External EHR at Charité | External reference |
 | 9 | Bridgehead | Federated data exchange | External reference |

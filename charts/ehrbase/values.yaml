@@ -54,7 +54,7 @@ config:
     type: BASIC  # Options: BASIC, OAUTH2
   
   database:
-    host: postgres-cluster.default.svc.cluster.local
+    host: postgres-cluster-rw.ohs.svc.cluster.local  # CNPG read-write endpoint; update namespace if not 'ohs'
     port: 5432
     name: ehrbase
     username: ehrbase

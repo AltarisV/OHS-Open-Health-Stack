@@ -11,7 +11,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **Eos**                        | ETL from openEHR to OMOP CDM            | Active         | `ghcr.io/SevKohler/Eos:latest`                                                      |
 | **EHRsuction**                 | openEHR composition export job          | Active         | `localhost:5000/ehrsuction:ohs`                                                     |
 | **openEHRTool-v2**             | Web UI for EHR editing (Vue3 + FastAPI) | Active         | `localhost:5000/openehrtool-backend:ohs`, `localhost:5000/openehrtool-frontend:ohs` |
-| **Cohort Explorer**            | OMOP CDM query UI                       | Active         | self-built local images                                                             |
+| **Cohort Explorer**            | openEHR / AQL cohort query UI (NUM num-portal) | Active  | self-built local images                                                             |
 | **Keycloak**                   | Identity and access management          | Active         | `quay.io/keycloak/keycloak:24.0`                                                    |
 | **CloudNativePG**              | PostgreSQL operator                     | Active         | `1.21.0`                                                                            |
 | **MongoDB Community Operator** | MongoDB operator                        | Active         | `0.8.0`                                                                             |
@@ -31,7 +31,7 @@ flowchart TB
         ehrbase["EHRbase<br/>openEHR EHR store"]:::app
         openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
         eos["Eos<br/>openEHR → OMOP ETL"]:::app
-        cohort["Cohort Explorer<br/>OMOP query UI"]:::app
+        cohort["Cohort Explorer<br/>openEHR / AQL cohort UI"]:::app
     end
 
     subgraph data["Data stores"]
@@ -41,6 +41,7 @@ flowchart TB
     end
 
     analyst["Researcher"]:::ext
+    omoptools["External OMOP /<br/>OHDSI analytics tools"]:::ext
 
     src -->|"REST: create EHR / compositions"| ehrbase
     ehrbase --> pg_ehr
@@ -48,8 +49,9 @@ flowchart TB
     openfhir -->|"FHIR resources"| mongo
     eos -->|"reads compositions"| ehrbase
     eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
-    cohort -->|"OMOP queries"| pg_omop
-    analyst -->|"explore cohorts"| cohort
+    cohort -->|"AQL queries"| ehrbase
+    analyst -->|"define / run cohorts"| cohort
+    pg_omop -.->|"OMOP CDM (external use)"| omoptools
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;

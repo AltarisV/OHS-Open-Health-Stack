@@ -20,7 +20,7 @@ Maintained diagrams live in [`diagrams/`](diagrams/):
 
 The **logical / component view** (primary data flow) is rendered in the
 [project README](../README.md#architecture). The **Kubernetes deployment view** and the
-**end-to-end data flow** (openEHR → FHIR / OMOP CDM → cohort) are in
+**end-to-end data flow** (openEHR hub; AQL cohorts; FHIR/OMOP exports) are in
 [`diagrams/architecture.mmd.md`](diagrams/architecture.mmd.md).
 
 ## Helm Chart Structure

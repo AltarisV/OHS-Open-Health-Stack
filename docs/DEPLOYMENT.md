@@ -286,7 +286,7 @@ kubectl get endpoints -n ohs | grep -E 'ehrbase|openfhir|eos'
 
 ### Health Endpoints Responding
 
-Port-forwards, health checks, and the full end-to-end workflow (EHR → composition → OMOP → Cohort Explorer) are documented in **[VERIFICATION.md](VERIFICATION.md)**. Note that Eos listens on `8081`, not `8080`, and EHRbase APIs are under the `/ehrbase` path prefix.
+Port-forwards, health checks, and the full end-to-end workflow (EHR → composition → AQL cohort in Cohort Explorer, plus the parallel Eos → OMOP export) are documented in **[VERIFICATION.md](VERIFICATION.md)**. Note that Eos listens on `8081`, not `8080`, and EHRbase APIs are under the `/ehrbase` path prefix.
 
 ### Ingress Configured
 
@@ -320,7 +320,7 @@ kubectl logs -n ohs -l app=ehrbase -f
 
 ## First Deployment Tests
 
-See **[VERIFICATION.md](VERIFICATION.md)** for the complete functional test suite: creating an EHR, uploading a template, submitting a blood pressure composition, running the Eos OMOP transformation, and viewing the result in the Cohort Explorer.
+See **[VERIFICATION.md](VERIFICATION.md)** for the complete functional test suite: creating an EHR, uploading a template, submitting a blood pressure composition, building an AQL cohort over it in the Cohort Explorer, and (separately) running the Eos transformation to populate the OMOP CDM.
 
 ---
 
