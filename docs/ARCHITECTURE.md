@@ -8,43 +8,48 @@ OHS is a Kubernetes-native platform combining:
 - **Eos** — ETL from openEHR to OMOP CDM for research analytics
 - Additional stack components that are staged in the base profile until their deployment path is finalized (EHRsuction, CSV import)
 
-## Component Diagram
+## Diagrams
 
-```
-                    Ingress Controller
-                    (Nginx / Traefik)
-                           |
-          +----------------+----------------+
-          |                |                |
-     EHRbase           openFHIR            Eos
-   (EHR Store)       (FHIR API)       (OMOP Bridge)
-          |                |                |
-     PostgreSQL        MongoDB         PostgreSQL
-     (CloudNativePG)  (Mongo Operator) (same cluster,
-                                        eos_omop DB)
+Maintained diagrams live in [`diagrams/`](diagrams/):
+
+- **[`architecture.drawio`](diagrams/architecture.drawio)** — print-quality, editable in
+  [diagrams.net](https://app.diagrams.net) or the draw.io VS Code extension. Three pages:
+  logical view, Kubernetes deployment, and end-to-end data flow.
+- **[`architecture.mmd.md`](diagrams/architecture.mmd.md)** — the same three views as
+  diagram-as-code (Mermaid), rendered inline below.
+
+### Logical / Component view
+
+```mermaid
+flowchart TB
+    src["External source /<br/>openEHRTool-v2"]:::ext
+
+    subgraph apps["Application services"]
+        ehrbase["EHRbase<br/>openEHR EHR store"]:::app
+        openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
+        eos["Eos<br/>openEHR → OMOP ETL"]:::app
+    end
+
+    subgraph data["Data stores"]
+        pg_ehr[("PostgreSQL<br/>ehrbase DB")]:::db
+        mongo[("MongoDB<br/>FHIR cache")]:::db
+        pg_omop[("PostgreSQL<br/>eos_omop DB<br/>OMOP CDM")]:::db
+    end
+
+    src -->|"REST: create EHR / compositions"| ehrbase
+    ehrbase --> pg_ehr
+    openfhir -->|"reads compositions"| ehrbase
+    openfhir -->|"FHIR resources"| mongo
+    eos -->|"reads compositions"| ehrbase
+    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+
+    classDef ext fill:#eeeeee,stroke:#777777,color:#222;
+    classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
+    classDef db  fill:#e6f2e6,stroke:#4f8a4f,color:#222;
 ```
 
-## Data Flows
-
-### Primary: EHR Ingestion → Normalization
-
-```
-External Source / openEHRTool-v2
-        |
-        v
-   EHRbase REST API  -->  PostgreSQL (ehrbase DB)
-        |                      |
-        |          +-----------+-----------+
-        |          |                       |
-        v          v                       v
-   openFHIR    Transform to            Eos ETL
-   Bridge      FHIR resources     Transform to OMOP CDM
-        |          |                       |
-        v          v                       v
-  (reads EHRbase) MongoDB          PostgreSQL (eos_omop DB)
-                (FHIR cache)       PERSON, MEASUREMENT,
-                                   OBSERVATION, etc.
-```
+The Kubernetes deployment view and the end-to-end data flow (openEHR → FHIR / OMOP CDM →
+cohort) are in [`diagrams/architecture.mmd.md`](diagrams/architecture.mmd.md).
 
 ## Helm Chart Structure
 
