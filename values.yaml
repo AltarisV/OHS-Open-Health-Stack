@@ -189,7 +189,7 @@ openfhir:
     # ohs-credentials secret (keys openfhir-mongo-uri / ehrbase-user-password).
     ehrbase:
       enabled: true
-      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"  # CHANGE_ME: update namespace if not 'ohs'
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase"  # CHANGE_ME: update namespace if not 'ohs'
       username: "ehrbase_user"
 
   livenessProbe:
@@ -246,7 +246,7 @@ eos:
     # Password is injected via the ohs-credentials secret, key ehrbase-user-password.
     ehrbase:
       enabled: true
-      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080"  # CHANGE_ME: update namespace if not 'ohs'
+      baseUrl: "http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase/"  # CHANGE_ME: update namespace if not 'ohs'
       username: "ehrbase_user"
 
     # OMOP vocabularies and concept-mapping files.
@@ -280,7 +280,7 @@ ehrsuction:
   suspend: true           # set false to enable scheduled runs
   backoffLimit: 1
   config:
-    baseUrl: "http://ohs-ehrbase:8080"  # CHANGE_ME: update service name/namespace if different
+    baseUrl: "http://ohs-ehrbase:8080/ehrbase"  # CHANGE_ME: update service name/namespace if different
     platform: "EHRBASE"
     exportType: "CANONICAL"
     steps: 5000

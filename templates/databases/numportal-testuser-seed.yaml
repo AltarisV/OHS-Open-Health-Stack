@@ -1,0 +1,106 @@
+{{- if and .Values.keycloak.config.testUser.enabled (index .Values "cohort-explorer-backend" "enabled") }}
+---
+# Post-install Job that seeds testuser into num.user_details.
+# NUMportal does not auto-create users on first authenticated request — the row must
+# exist and be approved before any authenticated API call succeeds.
+# Runs after numportal-schema-init (weight 5); waits for Flyway to create the table.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-numportal-testuser-seed
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-timeout: "900s"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    app: numportal-testuser-seed
+    release: {{ .Release.Name }}
+spec:
+  backoffLimit: 20
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: numportal-testuser-seed
+        release: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-numportal-user-secret
+                  key: password
+            - name: PG_HOST
+              value: "postgres-cluster-rw.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: KC_URL
+              value: "http://{{ .Release.Name }}-keycloak.{{ .Release.Namespace }}.svc.cluster.local:8080"
+            - name: KC_ADMIN_USER
+              value: {{ .Values.keycloak.config.adminUser | quote }}
+            - name: KC_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ohs-credentials
+                  key: keycloak-admin-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "==> Waiting for Keycloak..."
+              until wget -q -O /dev/null "${KC_URL}/auth/realms/master/.well-known/openid-configuration" 2>/dev/null; do
+                echo "    Keycloak not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "    Keycloak ready."
+
+              echo "==> Fetching admin token..."
+              TOKEN_JSON=$(wget -q -O - \
+                --header="Content-Type: application/x-www-form-urlencoded" \
+                --post-data="grant_type=password&client_id=admin-cli&username=${KC_ADMIN_USER}&password=${KC_ADMIN_PASSWORD}" \
+                "${KC_URL}/auth/realms/master/protocol/openid-connect/token")
+              ADMIN_TOKEN=$(echo "$TOKEN_JSON" | tr -d '\n\r' | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+              if [ -z "$ADMIN_TOKEN" ]; then
+                echo "ERROR: failed to obtain admin token" >&2; exit 1
+              fi
+              echo "    Admin token obtained."
+
+              echo "==> Fetching testuser UUID from Keycloak crr realm..."
+              USER_JSON=$(wget -q -O - \
+                --header="Authorization: Bearer ${ADMIN_TOKEN}" \
+                "${KC_URL}/auth/admin/realms/crr/users?username=testuser")
+              USER_ID=$(echo "$USER_JSON" | tr -d '\n\r' | grep -o '"id":"[0-9a-f-]*"' | head -1 | cut -d'"' -f4)
+              if [ -z "$USER_ID" ]; then
+                echo "ERROR: testuser not found in Keycloak crr realm — ensure keycloak.config.testUser.enabled=true and realm was imported" >&2
+                exit 1
+              fi
+              echo "    testuser UUID: ${USER_ID}"
+
+              echo "==> Waiting for PostgreSQL..."
+              until pg_isready -h "$PG_HOST" -U numportal -q; do sleep 3; done
+              echo "    PostgreSQL ready."
+
+              echo "==> Waiting for num.user_details table (Flyway migration in cohort-explorer-backend)..."
+              until psql "postgresql://numportal@${PG_HOST}/numportal" -t -c \
+                "SELECT 1 FROM information_schema.tables WHERE table_schema='num' AND table_name='user_details'" \
+                2>/dev/null | grep -q 1; do
+                echo "    Table not ready yet, retrying in 5s..."
+                sleep 5
+              done
+              echo "    Table ready."
+
+              echo "==> Inserting testuser into num.user_details..."
+              psql "postgresql://numportal@${PG_HOST}/numportal" -c \
+                "INSERT INTO num.user_details (user_id, approved, created_date)
+                 VALUES ('${USER_ID}', true, CURRENT_DATE)
+                 ON CONFLICT (user_id) DO NOTHING;"
+
+              echo "==> testuser seed complete."
+{{- end }}

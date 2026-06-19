@@ -59,6 +59,7 @@ kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
 kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
 kubectl port-forward svc/ohs-keycloak 8083:8080 -n ohs
 kubectl port-forward svc/ohs-cohort-explorer-backend 8084:8090 -n ohs
+kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
 ```
 
 Run basic checks:

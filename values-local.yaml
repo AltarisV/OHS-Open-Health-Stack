@@ -64,7 +64,7 @@ openfhir:
     enabled: true
   config:
     ehrbase:
-      baseUrl: "http://ohs-ehrbase:8080"
+      baseUrl: "http://ohs-ehrbase:8080/ehrbase"
 
 eos:
   replicaCount: 1
@@ -83,7 +83,7 @@ eos:
     database:
       host: "postgres-cluster-rw"
     ehrbase:
-      baseUrl: "http://ohs-ehrbase:8080"
+      baseUrl: "http://ohs-ehrbase:8080/ehrbase/"
     jvm:
       maxHeapSize: "1g"
 
@@ -100,7 +100,7 @@ ehrsuction:
   suspend: true
   backoffLimit: 1
   config:
-    baseUrl: "http://ohs-ehrbase:8080"
+    baseUrl: "http://ohs-ehrbase:8080/ehrbase"
     platform: "EHRBASE"
     exportType: "CANONICAL"
     steps: 5000

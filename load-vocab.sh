@@ -222,11 +222,17 @@ fi
 # Check whether vocab is fully loaded (use drug_strength as the final sentinel —
 # only present and populated when the entire pipeline completed successfully).
 DRUG_COUNT=$(psql_exec "$PRIMARY_POD" -t -c "
-  SELECT CASE WHEN EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema='${CDM_SCHEMA}' AND table_name='drug_strength'
-  ) THEN (SELECT COUNT(*) FROM ${CDM_SCHEMA}.drug_strength)::text
-    ELSE '0' END;" 2>/dev/null | tr -d ' \n')
+  SELECT COUNT(*) FROM information_schema.tables
+  WHERE table_schema='${CDM_SCHEMA}' AND table_name='drug_strength';" \
+  2>/dev/null | tr -d ' \n')
+# If the table exists, get its row count; otherwise keep 0
+if [[ "$DRUG_COUNT" == "1" ]]; then
+  DRUG_COUNT=$(psql_exec "$PRIMARY_POD" -t -c \
+    "SELECT COUNT(*) FROM ${CDM_SCHEMA}.drug_strength;" \
+    2>/dev/null | tr -d ' \n')
+else
+  DRUG_COUNT=0
+fi
 
 if [[ "$DRUG_COUNT" =~ ^[0-9]+$ && "$DRUG_COUNT" -gt 0 ]]; then
   if [[ "${FORCE_RELOAD:-0}" != "1" ]]; then
@@ -319,6 +325,9 @@ echo ""
 echo "======================================================"
 echo " Verification"
 echo "======================================================"
+# || true: COUNT(*) on large tables can be interrupted by CNPG maintenance
+# restarts without affecting the data already written.  Don't let a transient
+# connection drop abort the script before indices are created.
 psql_exec "$PRIMARY_POD" -c "
 SELECT table_name, to_char(row_count, 'FM999,999,999') AS rows
 FROM (
@@ -331,7 +340,7 @@ FROM (
   UNION ALL SELECT 'concept_ancestor',         COUNT(*) FROM ${CDM_SCHEMA}.concept_ancestor
   UNION ALL SELECT 'concept_synonym',          COUNT(*) FROM ${CDM_SCHEMA}.concept_synonym
   UNION ALL SELECT 'drug_strength',            COUNT(*) FROM ${CDM_SCHEMA}.drug_strength
-) t ORDER BY table_name;"
+) t ORDER BY table_name;" || echo "  WARNING: verification query failed (transient connection drop) — data was written, continuing to index creation."
 
 echo ""
 echo "Vocabulary loaded successfully."
@@ -380,6 +389,21 @@ if [[ -n "$TMP_IDX" && -s "$TMP_IDX" ]]; then
     psql -U postgres -d "$DB_NAME" --set ON_ERROR_STOP=0 -f - \
     < "$TMP_IDX" || true
   echo " Indices created."
+
+  # Restore primary keys on vocabulary tables that were dropped before loading.
+  # The OHDSI indices script only creates secondary indices, not PKs.
+  # Without PKs, Hibernate cannot create FK constraints to these tables, and
+  # concept lookups degrade to sequential scans on 5M+ row tables.
+  echo ""
+  echo " Restoring primary keys on vocabulary tables ..."
+  psql_exec "$PRIMARY_POD" -c "
+    ALTER TABLE ${CDM_SCHEMA}.concept       ADD PRIMARY KEY (concept_id);
+    ALTER TABLE ${CDM_SCHEMA}.concept_class ADD PRIMARY KEY (concept_class_id);
+    ALTER TABLE ${CDM_SCHEMA}.domain        ADD PRIMARY KEY (domain_id);
+    ALTER TABLE ${CDM_SCHEMA}.vocabulary    ADD PRIMARY KEY (vocabulary_id);
+    ALTER TABLE ${CDM_SCHEMA}.relationship  ADD PRIMARY KEY (relationship_id);
+  " 2>&1 | grep -v '^$' || echo "  WARNING: some PKs may already exist (FORCE_RELOAD run) — continuing."
+  echo " Primary keys restored."
 fi
 
 echo ""

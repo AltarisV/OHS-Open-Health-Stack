@@ -79,14 +79,14 @@ spec:
               name: postgres-eos-user-secret
               key: password
         
-        # EHRbase / openEHR configuration
-        - name: OPENEHR_BASE_URL
+        # EHRbase / openEHR configuration (eos.openehr.* properties)
+        - name: EOS_OPENEHR_BASE_URL
           value: {{ .Values.config.ehrbase.baseUrl | quote }}
-        - name: OPENEHR_SECURITY_TYPE
+        - name: EOS_OPENEHR_SECURITY_TYPE
           value: "basic"
-        - name: OPENEHR_SECURITY_USER_NAME
+        - name: EOS_OPENEHR_SECURITY_USER_NAME
           value: {{ .Values.config.ehrbase.username | quote }}
-        - name: OPENEHR_SECURITY_USER_PASSWORD
+        - name: EOS_OPENEHR_SECURITY_USER_PASSWORD
           valueFrom:
             secretKeyRef:
               name: ohs-credentials

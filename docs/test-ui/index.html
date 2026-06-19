@@ -125,7 +125,7 @@
       </div>
       <div class="field-row">
         <div><label>Cohort Explorer Backend</label><input id="cfg-ceb" value="http://localhost:8084"></div>
-        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8081"></div>
+        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8085"></div>
       </div>
     </div>
   </div>
@@ -180,7 +180,7 @@
     <div class="fields">
       <div><label>Template ID</label><input id="s2-template-id" value="ehrbase_blood_pressure_simple.de.v0" readonly></div>
       <div><label>OPT XML (paste or use bundled)</label>
-        <textarea id="s2-opt" rows="6" style="width:100%;background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:monospace;font-size:11px;resize:vertical;" placeholder="Paste OPT XML here, or click 'Use bundled template' below"></textarea>
+        <textarea id="s2-opt" rows="6" style="width:100%;background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:monospace;font-size:11px;resize:vertical;" placeholder="Paste OPT XML here, or click 'Load bundled OPT' below"></textarea>
       </div>
     </div>
     <div class="actions">
@@ -230,12 +230,17 @@
 <!-- STEP 4: EOS -->
 <div class="panel" id="panel-s4">
   <h2>Step 4 — EOS OMOP Transformation</h2>
-  <p class="desc">Triggers EOS to read compositions from EHRbase and write OMOP CDM records. Requires Athena vocabularies to be loaded and <code>athenaVocabulariesPresent=true</code> in EOS config.</p>
+  <p class="desc">EOS reads from EHRbase and writes OMOP CDM records into PostgreSQL. Run the two endpoints <strong>in order</strong>:</p>
+  <ol class="desc" style="margin: -12px 0 16px 20px; line-height: 2;">
+    <li><strong>POST /person</strong> — maps EHR subjects → OMOP <code>person</code> table. Run this first.</li>
+    <li><strong>POST /ehr</strong> — maps compositions → OMOP clinical records (<code>measurement</code>, etc.). Requires persons to exist.</li>
+  </ol>
+  <p class="desc" style="margin-top:-8px;">⚠ Without Athena vocabularies loaded and <code>athenaVocabulariesPresent=true</code> in EOS config, concept mapping is skipped and <code>measurement</code> stays empty — that is expected on a default install.</p>
   <div class="card">
-    <h3>Trigger</h3>
+    <h3>Trigger (run in order)</h3>
     <div class="actions">
-      <button class="primary" onclick="step4person()">POST /person</button>
-      <button class="secondary" onclick="step4ehr()">POST /ehr</button>
+      <button class="primary" onclick="step4person()">1. POST /person</button>
+      <button class="secondary" onclick="step4ehr()">2. POST /ehr</button>
       <span class="status" id="s4-status"></span>
     </div>
   </div>
@@ -284,38 +289,31 @@
       <div><label>Access Token</label><input id="s6-token" placeholder="from Step 5" style="font-size:11px"><div class="propagated" id="s6-token-propagated"></div></div>
     </div>
     <div class="actions">
-      <button class="primary" onclick="s6query('/api/v1/cohort', 's6-cohorts')">List Cohorts</button>
-      <button class="secondary" onclick="s6query('/api/v1/organization', 's6-orgs')">List Organizations</button>
-      <button class="secondary" onclick="s6query('/api/v1/content', 's6-content')">List Content</button>
+      <button class="primary" onclick="s6query('/organization', 's6-cohorts')">List Organizations</button>
+      <button class="secondary" onclick="s6query('/organization/all', 's6-orgs')">List All Organizations</button>
+      <button class="secondary" onclick="s6query('/content/navigation', 's6-content')">List Content</button>
       <span class="status" id="s6-status"></span>
     </div>
   </div>
-  <div class="response-box" id="s6-cohorts-box" style="display:none"><label>/api/v1/cohort</label><pre id="s6-cohorts"></pre></div>
-  <div class="response-box" id="s6-orgs-box" style="display:none"><label>/api/v1/organization</label><pre id="s6-orgs"></pre></div>
-  <div class="response-box" id="s6-content-box" style="display:none"><label>/api/v1/content</label><pre id="s6-content"></pre></div>
+  <div class="response-box" id="s6-cohorts-box" style="display:none"><label>/organization</label><pre id="s6-cohorts"></pre></div>
+  <div class="response-box" id="s6-orgs-box" style="display:none"><label>/organization/all</label><pre id="s6-orgs"></pre></div>
+  <div class="response-box" id="s6-content-box" style="display:none"><label>/content/navigation</label><pre id="s6-content"></pre></div>
 </div>
 
-<!-- STEP 7: FHIR -->
+<!-- STEP 7: openFHIR -->
 <div class="panel" id="panel-s7">
-  <h2>openFHIR — FHIR Queries</h2>
-  <p class="desc">Basic FHIR R4 queries against the openFHIR server.</p>
+  <h2>openFHIR — Mapping Engine</h2>
+  <p class="desc">openFHIR is a FHIRConnect <strong>mapping engine</strong> (openEHR ⇄ FHIR), not a FHIR REST server — there is no <code>/fhir/Patient</code> API. Verify liveness and configured mappings.</p>
   <div class="card">
     <h3>Queries</h3>
-    <div class="fields">
-      <div class="field-row">
-        <div><label>EHR ID (for patient lookup)</label><input id="s7-ehr-id" placeholder="from Step 1"><div class="propagated" id="s7-ehr-propagated"></div></div>
-        <div></div>
-      </div>
-    </div>
     <div class="actions">
-      <button class="primary" onclick="fhirQuery('/fhir/Patient', 's7-patients')">GET /fhir/Patient</button>
-      <button class="secondary" onclick="fhirQueryById()">GET Patient by EHR ID</button>
-      <button class="secondary" onclick="fhirQuery('/fhir/Observation', 's7-obs')">GET /fhir/Observation</button>
+      <button class="primary" onclick="fhirQuery('/health', 's7-health')">GET /health</button>
+      <button class="secondary" onclick="fhirQuery('/fc/model', 's7-models')">GET /fc/model</button>
       <span class="status" id="s7-status"></span>
     </div>
   </div>
-  <div class="response-box" id="s7-patients-box" style="display:none"><label>Patients</label><pre id="s7-patients"></pre></div>
-  <div class="response-box" id="s7-obs-box" style="display:none"><label>Observations</label><pre id="s7-obs"></pre></div>
+  <div class="response-box" id="s7-health-box" style="display:none"><label>/health</label><pre id="s7-health"></pre></div>
+  <div class="response-box" id="s7-models-box" style="display:none"><label>/fc/model</label><pre id="s7-models"></pre></div>
 </div>
 
 </main>
@@ -370,9 +368,7 @@ function propagateState() {
   if (state.ehrId) {
     set('s1-ehr-id', state.ehrId);
     set('s3-ehr-id', state.ehrId);
-    set('s7-ehr-id', state.ehrId);
     document.getElementById('s3-ehr-propagated').textContent = '↑ from Step 1';
-    document.getElementById('s7-ehr-propagated').textContent = '↑ from Step 1';
   }
   if (state.token) {
     set('s5-token', state.token.substring(0, 60) + '...');
@@ -443,7 +439,8 @@ async function step2() {
       headers: { 'Authorization': ehrbaseAuth(), 'Content-Type': 'application/xml' },
       body: opt
     });
-    showResp('s2-resp-box', 's2-resp', r.raw || r.body, r.ok || r.status === 409);
+    const display = r.raw || (typeof r.body === 'string' ? r.body : JSON.stringify(r.body, null, 2)) || '(no body)';
+    showResp('s2-resp-box', 's2-resp', 'HTTP ' + r.status + '\n\n' + display, r.ok || r.status === 409);
     if (r.ok) {
       setStatus('s2-status', '✓ Template uploaded', 'ok');
       markNav('s2', true);
@@ -517,9 +514,7 @@ async function step3() {
 // ── Step 4: EOS ───────────────────────────────────────────────────────────
 async function eosPost(path, boxId, respId) {
   try {
-    const r = await apiFetch(cfg('cfg-eos') + path, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
-    });
+    const r = await apiFetch(cfg('cfg-eos') + path, { method: 'POST' });
     document.getElementById(boxId).style.display = 'block';
     showResp(boxId, respId, r.body, r.ok);
     return r.ok;
@@ -579,7 +574,7 @@ async function s6query(path, respId) {
   setStatus('s6-status', 'Querying ' + path + '...', 'running');
   const boxId = respId + '-box';
   try {
-    const r = await apiFetch(cfg('cfg-ceb') + '/num-portal' + path, {
+    const r = await apiFetch(cfg('cfg-ceb') + path, {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     document.getElementById(boxId).style.display = 'block';
@@ -593,7 +588,7 @@ async function s6query(path, respId) {
   }
 }
 
-// ── Step 7: FHIR ─────────────────────────────────────────────────────────
+// ── Step 7: openFHIR ──────────────────────────────────────────────────────
 async function fhirQuery(path, respId) {
   const boxId = respId + '-box';
   setStatus('s7-status', 'Querying...', 'running');
@@ -607,11 +602,6 @@ async function fhirQuery(path, respId) {
     showResp(boxId, respId, e.message, false);
     setStatus('s7-status', '✗ ' + e.message, 'err');
   }
-}
-async function fhirQueryById() {
-  const id = val('s7-ehr-id') || state.ehrId;
-  if (!id) { alert('No EHR ID — run Step 1 first.'); return; }
-  await fhirQuery('/fhir/Patient?identifier=' + encodeURIComponent(id), 's7-patients');
 }
 </script>
 </body>
