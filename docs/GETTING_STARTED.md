@@ -61,7 +61,7 @@ kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
 |---------|-----|-------|
 | EHRbase | http://localhost:8080/ehrbase/rest/openehr/v1/ | Basic auth: ehrbase_user / your password |
 | EHRbase Swagger | http://localhost:8080/swagger-ui/ | |
-| openFHIR | http://localhost:8081/fhir/metadata | FHIR R4 |
+| openFHIR | http://localhost:8081/health | FHIRConnect mapping engine (no FHIR REST API) |
 | Eos | http://localhost:8082/actuator/health | Spring Boot actuator |
 | Keycloak | http://localhost:8083/auth | Admin console: /auth/admin |
 | Cohort Explorer API | http://localhost:8084/ | Requires Keycloak |
@@ -105,7 +105,7 @@ docker build --build-arg ENVIRONMENT=deploy \
   -t YOUR_REGISTRY/cohort-explorer-frontend:latest cohort-explorer-frontend/
 ```
 
-**Local development (no registry):** Docker Desktop shares the host Docker daemon — images built locally are immediately visible to Kubernetes without a registry:
+**Local development (no registry):** Docker Desktop shares the host Docker daemon - images built locally are immediately visible to Kubernetes without a registry:
 
 ```bash
 bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
@@ -145,10 +145,10 @@ keycloak:
 ```
 
 The `crr` Keycloak realm and both clients (`num-portal`, `num-portal-webapp`) are created
-automatically on first Keycloak startup — no manual admin console steps required.
+automatically on first Keycloak startup - no manual admin console steps required.
 See [NEXT_STEPS.md](NEXT_STEPS.md) for full prerequisites and secret keys needed.
 
-> **Important — frontend config URLs must be browser-accessible:** The `cohort-explorer-frontend.config.auth.baseUrl` and `cohort-explorer-frontend.config.api.baseUrl` values are fetched by the user's browser at runtime, not from inside the cluster. When port-forwarding, set them to `http://localhost:<port>` (e.g. `http://localhost:8083/auth` and `http://localhost:8084/num-portal`). See `values-local.yaml` for an example.
+> **Important - frontend config URLs must be browser-accessible:** The `cohort-explorer-frontend.config.auth.baseUrl` and `cohort-explorer-frontend.config.api.baseUrl` values are fetched by the user's browser at runtime, not from inside the cluster. When port-forwarding, set them to `http://localhost:<port>` (e.g. `http://localhost:8083/auth` and `http://localhost:8084/num-portal`). See `values-local.yaml` for an example.
 
 ### One-time: Create the attachment schema
 
@@ -174,7 +174,7 @@ done
 > role: `SUPER_ADMIN`) is created automatically in the `crr` realm on first Keycloak startup.
 > Skip this section and log in directly at `http://localhost:8085`.
 
-> **Production:** `testUser.enabled` is `false` by default — no test user is created.
+> **Production:** `testUser.enabled` is `false` by default - no test user is created.
 > Follow the steps below to create your first user via the Keycloak Admin API
 > (requires the Keycloak port-forward to be running on 8083):
 
@@ -225,7 +225,7 @@ done
 
 ## Building openEHRTool-v2
 
-No published Docker images exist upstream. Use `build-images.sh` — it clones the upstream repo into a temp directory, applies required patches, builds the images, and cleans up. The repo is never stored in the workspace.
+No published Docker images exist upstream. Use `build-images.sh` - it clones the upstream repo into a temp directory, applies required patches, builds the images, and cleans up. The repo is never stored in the workspace.
 
 ```bash
 # For a registry-based workflow (standard Kubernetes)
@@ -253,11 +253,5 @@ The three subcharts (`openehrtool-redis`, `openehrtool-backend`, `openehrtool-fr
 
 ## Documentation
 
-| File | Contents |
-|------|----------|
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Full deployment guide + production notes |
-| [VERIFICATION.md](VERIFICATION.md) | Health checks + end-to-end testing |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Component overview and data flows |
-| [SECRETS.md](SECRETS.md) | Secret management options |
-| [VALUES.md](VALUES.md) | Complete configuration reference |
-| [NEXT_STEPS.md](NEXT_STEPS.md) | Roadmap and future phases |
+See the [documentation index in the project README](../README.md#documentation) for the full
+list of guides (deployment, verification, architecture, secrets, values, roadmap).

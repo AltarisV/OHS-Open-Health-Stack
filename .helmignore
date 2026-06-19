@@ -8,7 +8,7 @@
 .gitmodules
 # CI/build artifacts
 .github/
-# Large data files — not part of the Helm chart
+# Large data files - not part of the Helm chart
 vocab/
 *.csv
 *.zip

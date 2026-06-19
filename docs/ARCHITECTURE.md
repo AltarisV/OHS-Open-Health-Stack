@@ -3,19 +3,19 @@
 ## Overview
 
 OHS is a Kubernetes-native platform combining:
-- **EHRbase** — openEHR EHR storage (ISO 13606)
-- **openFHIR** — FHIR R4 API and openEHR bridge
-- **Eos** — ETL from openEHR to OMOP CDM for research analytics
+- **EHRbase** - openEHR EHR storage (ISO 13606)
+- **openFHIR** - FHIR R4 API and openEHR bridge
+- **Eos** - ETL from openEHR to OMOP CDM for research analytics
 - Additional stack components that are staged in the base profile until their deployment path is finalized (EHRsuction, CSV import)
 
 ## Diagrams
 
 Maintained diagrams live in [`diagrams/`](diagrams/):
 
-- **[`architecture.drawio`](diagrams/architecture.drawio)** — print-quality, editable in
+- **[`architecture.drawio`](diagrams/architecture.drawio)** - print-quality, editable in
   [diagrams.net](https://app.diagrams.net) or the draw.io VS Code extension. Three pages:
   logical view, Kubernetes deployment, and end-to-end data flow.
-- **[`architecture.mmd.md`](diagrams/architecture.mmd.md)** — the same three views as
+- **[`architecture.mmd.md`](diagrams/architecture.mmd.md)** - the same three views as
   diagram-as-code (Mermaid), rendered inline on GitHub.
 
 The **logical / component view** (primary data flow) is rendered in the

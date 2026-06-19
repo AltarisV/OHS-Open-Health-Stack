@@ -4,7 +4,9 @@ This document captures the original requirements and constraints that shaped OHS
 
 ## Mission
 
-Create a single Helm umbrella chart that deploys 9 health data tools together in Kubernetes, providing a unified, production-ready platform for EHR storage, FHIR interoperability, and OMOP CDM analytics.
+Create a single Helm umbrella chart that deploys a unified, production-ready health data
+platform in Kubernetes — covering EHR storage, FHIR interoperability, and OMOP CDM analytics.
+The catalogue below tracks the in-cluster components plus the external systems they integrate with.
 
 ## Components
 
@@ -14,8 +16,8 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 | 2 | openFHIR / FHIRconnect | FHIR R4 API & openEHR bridge | Active |
 | 3 | Eos | ETL from openEHR to OMOP CDM | Active |
 | 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Active |
-| 5 | EHRsuction | Data export tool | Placeholder |
-| 6 | Cohort Explorer | OMOP CDM query UI | Required component |
+| 5 | EHRsuction | Data export tool (CronJob) | Active |
+| 6 | Cohort Explorer | OMOP CDM query UI | Active |
 | 7 | CSV-to-openEHR | Bulk import from CSV | Placeholder |
 | 8 | BETTER Platform | External EHR at Charité | External reference |
 | 9 | Bridgehead | Federated data exchange | External reference |
@@ -24,8 +26,8 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 
 | # | Constraint | Implementation |
 |---|-----------|----------------|
-| 1 | No upstream modifications | All components deployed from official published images |
-| 2 | Assume images may not exist | `build-images.sh` clones, builds, and optionally pushes custom images for openEHRTool-v2 and Cohort Explorer |
+| 1 | No upstream forks | Components run from official published images where they exist; no forked source trees are maintained |
+| 2 | Assume images may not exist | `build-images.sh` clones, applies minimal build-time patches, and builds/pushes images for components without published ones (openEHRTool-v2, EHRsuction, Cohort Explorer) |
 | 3 | Helm-only packaging | No custom controllers; CloudNativePG + MongoDB operators for state |
 | 4 | Single deploy command | Umbrella chart: `helm install ohs . -f values.yaml -n ohs` |
 | 5 | Components independently togglable | All templates wrapped in `if .Values.COMPONENT.enabled` |
@@ -34,11 +36,11 @@ Create a single Helm umbrella chart that deploys 9 health data tools together in
 | 8 | Network & security first | NetworkPolicy, RBAC, PodDisruptionBudgets in root templates |
 | 9 | Placeholder architecture | Disabled subcharts reserve namespace for future components |
 | 10 | Separation of concerns | `charts/` per component, `templates/databases/`, `packaging/` for builds |
-| 11 | Documentation over configuration | 8 documentation files covering all aspects of deployment and operation |
+| 11 | Documentation over configuration | A `docs/` set covering deployment, verification, architecture, secrets, values, and roadmap |
 
 ## Success Criteria
 
-1. All 9 components deploy together via a single Helm command
+1. All in-cluster components deploy together via a single Helm command (external references aside)
 2. Each component can be independently enabled/disabled
 3. No upstream repositories modified or forked
 4. No secrets appear in Git history

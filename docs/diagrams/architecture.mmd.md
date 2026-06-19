@@ -3,9 +3,9 @@
 Diagram-as-code companions to the polished [`architecture.drawio`](architecture.drawio)
 file. Three views:
 
-1. **Logical / component view** — what the services are and how data moves between them.
-2. **Kubernetes deployment view** — how the stack runs in the cluster.
-3. **End-to-end data flow** — the path of a single record from ingestion to analytics.
+1. **Logical / component view** - what the services are and how data moves between them.
+2. **Kubernetes deployment view** - how the stack runs in the cluster.
+3. **End-to-end data flow** - the path of a single record from ingestion to analytics.
 
 > Renders directly in GitHub, the VS Code Mermaid preview, and most Markdown
 > toolchains. For a print-quality figure, export the draw.io version to SVG/PDF.
@@ -79,7 +79,7 @@ flowchart TB
         subgraph ns["Namespace: ohs"]
             direction TB
 
-            subgraph applayer["App layer — Deployments + Services"]
+            subgraph applayer["App layer - Deployments + Services"]
                 ehrbase["EHRbase :8080"]:::app
                 openfhir["openFHIR :8080"]:::app
                 eos["Eos :8081"]:::app
@@ -90,7 +90,7 @@ flowchart TB
                 tool_be["openEHRTool BE"]:::app
             end
 
-            subgraph datalayer["Data layer — StatefulSets (operator-managed)"]
+            subgraph datalayer["Data layer - StatefulSets (operator-managed)"]
                 pg[("PostgreSQL cluster (CNPG)<br/>ehrbase · eos_omop · numportal")]:::db
                 mongo[("MongoDB cluster")]:::db
                 redis[("Redis")]:::db

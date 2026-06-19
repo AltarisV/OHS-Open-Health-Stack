@@ -49,7 +49,7 @@ spec:
         - -ec
         - |
           # Gate until EHRbase is reachable. Any HTTP response (incl. 404/401 on the
-          # bare URL) means the server is up — the app context lives under /ehrbase
+          # bare URL) means the server is up - the app context lives under /ehrbase
           # and the REST endpoints require auth, so we don't check a specific path.
           until wget -T 5 -S -O /dev/null "{{ .Values.config.ehrbase.baseUrl }}" 2>&1 | grep -q "HTTP/"; do
             echo "Waiting for EHRbase at {{ .Values.config.ehrbase.baseUrl }}..."

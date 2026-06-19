@@ -88,7 +88,7 @@ eos:
       maxHeapSize: "1g"
 
 # ── EHRsuction ────────────────────────────────────────────────────────────────
-# Build image before deploying (Docker Desktop shares the host Docker daemon — no eval needed):
+# Build image before deploying (Docker Desktop shares the host Docker daemon - no eval needed):
 #   bash build-images.sh --registry localhost:5000 --component ehrsuction --skip-push
 ehrsuction:
   enabled: true

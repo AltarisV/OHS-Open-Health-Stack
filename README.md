@@ -1,6 +1,6 @@
 # Open Health Stack (OHS)
 
-A Kubernetes-native Helm umbrella chart that deploys a unified health data platform — combining openEHR EHR storage, FHIR interoperability, OMOP CDM analytics, identity management, and export tooling — using Helm with minimal changes to upstream projects.
+A Kubernetes-native Helm umbrella chart that deploys a unified health data platform - combining openEHR EHR storage, FHIR interoperability, OMOP CDM analytics, identity management, and export tooling - using Helm with minimal changes to upstream projects.
 
 ## Components
 
@@ -20,7 +20,7 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 
 ## Architecture
 
-How data flows through the stack — captured as openEHR in EHRbase, then bridged to
+How data flows through the stack - captured as openEHR in EHRbase, then bridged to
 FHIR (openFHIR) and transformed to the OMOP CDM (Eos) for analytics:
 
 ```mermaid
@@ -84,7 +84,7 @@ Optional local deployment (Docker Desktop Kubernetes):
 
 ```bash
 # Build local images required by components without published images.
-# Docker Desktop shares the host Docker daemon — no eval step needed.
+# Docker Desktop shares the host Docker daemon - no eval step needed.
 OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push
 

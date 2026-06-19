@@ -1,6 +1,9 @@
 # Values Reference: Open Health Stack
 
-This document provides a comprehensive reference for all Helm chart values and their configurations.
+This document is a reference for the Helm chart values. `values.yaml` (and
+`values-local.yaml` for the Docker Desktop profile) is the canonical source of truth — when
+this page and `values.yaml` disagree, `values.yaml` wins. In-cluster hostnames below assume
+the release is installed as `ohs` in namespace `ohs`; substitute your own if you change either.
 
 ## Table of Contents
 
@@ -11,7 +14,7 @@ This document provides a comprehensive reference for all Helm chart values and t
 5. [EHRbase](#ehrbase)
 6. [openFHIR](#openfhir)
 7. [Eos (OMOP Bridge)](#eos-omop-bridge)
-8. [openEHRTool-v2](#opehrtool-v2)
+8. [openEHRTool-v2](#openehrtool-v2)
 9. [Placeholder Components](#placeholder-components)
 10. [Networking & Ingress](#networking--ingress)
 11. [RBAC & Security](#rbac--security)
@@ -278,9 +281,9 @@ ehrbase:
                                     # Default: "BASIC"
   
   database:
-    host: string                    # PostgreSQL host/service name
-                                    # Default: "postgres-cluster.default.svc.cluster.local"
-                                    # CHANGE_ME: update if using external database or different namespace
+    host: string                    # PostgreSQL host/service name (CNPG read-write endpoint)
+                                    # Default: "postgres-cluster-rw.ohs.svc.cluster.local"
+                                    # CHANGE_ME: update namespace if not 'ohs'
     
     port: integer                   # PostgreSQL port
                                     # Default: 5432
@@ -337,7 +340,7 @@ ehrbase:
     username: "ehrbase_admin"
     password: "CHANGE_ME_STRONG_PASSWORD"  # Inject via Secret!
   database:
-    host: "postgres-cluster.default.svc.cluster.local"
+    host: "postgres-cluster-rw.ohs.svc.cluster.local"
     password: "CHANGE_ME_DB_PASSWORD"  # Inject via Secret!
 ```
 
@@ -389,17 +392,18 @@ openfhir:
                                     # Options: "STU3" (outdated), "R4" (current), "R4B", "R5" (draft)
   
   database:
-    mongoUri: string                # MongoDB connection string
-                                    # Default: "mongodb://openfhir:PASSWORD@mongodb-cluster:27017/openfhir"
-                                    # CHANGE_ME: inject password via Secret
+    mongoUri: string                # MongoDB connection string. In practice this is injected
+                                    # from ohs-credentials/openfhir-mongo-uri (see SECRETS.md),
+                                    # not set here. Service name: "mongodb-cluster-svc".
+                                    # e.g. "mongodb://openfhir:PASSWORD@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir"
   
   ehrbaseIntegration:
     enabled: boolean                # Enable two-way sync with EHRbase
                                     # Default: true
     
     baseUrl: string                 # EHRbase API endpoint
-                                    # Default: "http://ehrbase.default.svc.cluster.local:8080"
-                                    # CHANGE_ME: update namespace if different
+                                    # Default: "http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase"
+                                    # CHANGE_ME: update namespace if not 'ohs'
     
     username: string                # EHRbase API username
                                     # Default: "ehrbase_user"
@@ -415,6 +419,9 @@ openfhir:
     initialDelaySeconds: integer    # Default: 30
     periodSeconds: integer          # Default: 10
 ```
+
+> **openFHIR is a FHIRConnect mapping engine, not a FHIR REST server** — there is no
+> `/fhir/Patient` resource API. Liveness is `GET /health`; see VERIFICATION.md.
 
 ---
 
@@ -435,15 +442,15 @@ eos:
   image:
     repository: string              # Docker image
                                     # Default: "ghcr.io/sevkohler/eos"
-    tag: string                     # Image tag — upstream only publishes "latest"
+    tag: string                     # Image tag - upstream only publishes "latest"
                                     # Default: "latest" (pin to a digest for production)
                                     # Workflow: https://github.com/SevKohler/Eos
     pullPolicy: string
   
   service:
     type: string                    # Default: "ClusterIP"
-    port: integer                   # Default: 8080
-    targetPort: integer
+    port: integer                   # Default: 8081 (Eos listens on 8081, NOT 8080)
+    targetPort: integer             # Default: 8081
   
   ingress:
     enabled: boolean                # Default: true
@@ -459,8 +466,9 @@ eos:
       memory: string                # CHANGE_ME: e.g., "4Gi"
   
   database:
-    host: string                    # PostgreSQL host
-                                    # Default: "postgres-cluster.default.svc.cluster.local"
+    host: string                    # PostgreSQL host (CNPG read-write endpoint)
+                                    # Default: "postgres-cluster-rw.ohs.svc.cluster.local"
+                                    # (shared with EHRbase when postgres.eos.sharedCluster=true)
     port: integer                   # Default: 5432
     
     name: string                    # Database/schema name
@@ -476,7 +484,7 @@ eos:
   
   ehrbase:
     baseUrl: string                 # EHRbase API endpoint
-                                    # Default: "http://ehrbase.default.svc.cluster.local:8080"
+                                    # Default: "http://ohs-ehrbase.ohs.svc.cluster.local:8080/ehrbase/"
     
     username: string                # EHRbase username
                                     # Default: "ehrbase_user"
@@ -485,9 +493,10 @@ eos:
                                     # Default: "CHANGE_ME_SECURE_PASSWORD"
   
   omop:
-    athenaVocabulariesPresent: boolean  # Pre-loaded ATHENA vocabularies
-                                        # Default: false
-                                        # CHANGE_ME to true once vocabularies are in database
+    athenaVocabulariesPresent: boolean  # Informational only — upstream Eos has no runtime
+                                        # toggle and reads the vocab tables directly. Concept
+                                        # mapping works once Athena vocabularies are loaded into
+                                        # eos_omop and the Eos pod is restarted. Default: false
     
     mappingFiles: string            # OMOP concept mapping files location
                                     # Default: "CHANGE_ME_REFERENCE_MAPPINGS"
@@ -591,7 +600,7 @@ OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
   bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-frontend
 
-# Local Docker Desktop (no registry — shares host daemon)
+# Local Docker Desktop (no registry - shares host daemon)
 bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
 OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
   bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
@@ -606,11 +615,11 @@ Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_
 ### Remaining Staged Components
 
 EHRsuction, Cohort Explorer, Keycloak, and openEHRTool-v2 are implemented and enabled in the
-base/local profiles — see `values.yaml` and the per-component sections of GETTING_STARTED.md.
+base/local profiles - see `values.yaml` and the per-component sections of GETTING_STARTED.md.
 The following components are still staged.
 
 ```yaml
-csv-to-openeehr:
+csv-to-openehr:
   enabled: false                    # CSV to openEHR - Bulk import
                                     # Implementation strategy TBD
 
@@ -731,8 +740,7 @@ Kubernetes namespace configuration.
 ```yaml
 namespace:
   name: string                      # Namespace name
-                                    # Default: "default"
-                                    # CHANGE_ME: use dedicated namespace (e.g., "ohs")
+                                    # Recommended: "ohs" (assumed throughout these docs)
   
   create: boolean                   # Create namespace via Helm
                                     # Default: false
@@ -772,128 +780,23 @@ logging:
 
 ---
 
-## Common Configuration Patterns
+## Sizing by Environment
 
-### Development Environment
+Scale replicas, storage, and resources with the environment. Rough guidance:
 
-```yaml
-global:
-  environment: "development"
+| Setting | Development | Staging | Production |
+|---------|-------------|---------|------------|
+| `postgres.ehrbase.instances` | 1 | 2 | 3 |
+| `postgres.ehrbase.storage` | 10Gi | 20Gi | 100Gi |
+| `postgres.eos.storage` | 20Gi | 50Gi | 200Gi |
+| `mongodb.openfhir.replicas` | 1 | 2 | 3 |
+| app `replicaCount` (ehrbase/openfhir/eos) | 1 | 2 | 3 |
+| app resource requests | 100m / 512Mi | 500m / 1Gi | 1000m / 2Gi |
+| `monitoring.enabled` | false | false | true |
+| `ingress.tls.enabled` | false | true | true |
+| `global.podSecurityContext.runAsNonRoot` | false | true | true |
 
-postgres:
-  ehrbase:
-    instances: 1
-    storage: "10Gi"
-  eos:
-    storage: "20Gi"
-
-mongodb:
-  openfhir:
-    replicas: 1
-    storage: "10Gi"
-
-ehrbase:
-  replicaCount: 1
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "512Mi"
-    limits:
-      cpu: "500m"
-      memory: "1Gi"
-
-openfhir:
-  replicaCount: 1
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "512Mi"
-    limits:
-      cpu: "500m"
-      memory: "1Gi"
-
-eos:
-  replicaCount: 1
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "512Mi"
-    limits:
-      cpu: "500m"
-      memory: "1Gi"
-```
-
-### Staging Environment
-
-```yaml
-global:
-  environment: "staging"
-
-postgres:
-  ehrbase:
-    instances: 2
-    storage: "20Gi"
-  eos:
-    storage: "50Gi"
-
-ehrbase:
-  replicaCount: 2
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "1Gi"
-    limits:
-      cpu: "1000m"
-      memory: "2Gi"
-
-# (similar for others)
-```
-
-### Production Environment
-
-```yaml
-global:
-  environment: "production"
-  podSecurityContext:
-    runAsNonRoot: true
-
-postgres:
-  ehrbase:
-    instances: 3
-    storage: "100Gi"
-    backupRetention: "90d"
-  eos:
-    instances: 3
-    storage: "200Gi"
-
-mongodb:
-  openfhir:
-    replicas: 3
-    storage: "50Gi"
-
-ehrbase:
-  replicaCount: 3
-  resources:
-    requests:
-      cpu: "1000m"
-      memory: "2Gi"
-    limits:
-      cpu: "2000m"
-      memory: "4Gi"
-
-# (similar for others)
-
-monitoring:
-  enabled: true
-  prometheus:
-    servicemonitor:
-      enabled: true
-
-ingress:
-  tls:
-    enabled: true
-    issuer: "letsencrypt-prod"
-```
+The Docker Desktop profile in `values-local.yaml` is a ready-made development example.
 
 ---
 
@@ -917,9 +820,4 @@ The following placeholders should be replaced before production deployment:
 - Subchart documentation: See `charts/*/README.md`
 - Deployment guide: See `DEPLOYMENT.md`
 - Architecture overview: See `ARCHITECTURE.md`
-
----
-
-**Last Updated**: May 2026  
-**Version**: 0.1.0
 

@@ -54,7 +54,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="title1" value="OHS — logical component view and primary data flow" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
+        <mxCell id="title1" value="OHS - logical component view and primary data flow" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
           <mxGeometry x="40" y="450" width="500" height="20" as="geometry" />
         </mxCell>
       </root>
@@ -90,7 +90,7 @@
           <mxGeometry x="60" y="210" width="980" height="560" as="geometry" />
         </mxCell>
 
-        <mxCell id="appBox" value="App layer — Deployments + Services" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#3b6ea5;dashed=1;fontStyle=1;fontColor=#3b6ea5;" vertex="1" parent="1">
+        <mxCell id="appBox" value="App layer - Deployments + Services" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#3b6ea5;dashed=1;fontStyle=1;fontColor=#3b6ea5;" vertex="1" parent="1">
           <mxGeometry x="80" y="250" width="940" height="180" as="geometry" />
         </mxCell>
         <mxCell id="ehrbase2" value="EHRbase :8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3effa;strokeColor=#3b6ea5;" vertex="1" parent="1">
@@ -118,7 +118,7 @@
           <mxGeometry x="260" y="360" width="140" height="40" as="geometry" />
         </mxCell>
 
-        <mxCell id="dataBox2" value="Data layer — StatefulSets (operator-managed)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#4f8a4f;dashed=1;fontStyle=1;fontColor=#4f8a4f;" vertex="1" parent="1">
+        <mxCell id="dataBox2" value="Data layer - StatefulSets (operator-managed)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=none;strokeColor=#4f8a4f;dashed=1;fontStyle=1;fontColor=#4f8a4f;" vertex="1" parent="1">
           <mxGeometry x="80" y="460" width="640" height="130" as="geometry" />
         </mxCell>
         <mxCell id="pg2" value="PostgreSQL cluster (CNPG)&#10;ehrbase · eos_omop · numportal" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#e6f2e6;strokeColor=#4f8a4f;" vertex="1" parent="1">
@@ -192,11 +192,11 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="legend" value="Legend&#10;— solid arrow = request / data flow (label = ingress path or port)&#10;— dashed arrow = managed-by / mounts / env injection&#10;hexagon = Ingress · cylinder = stateful store · parallelogram = Secret / PVC" style="text;html=1;align=left;verticalAlign=top;fontSize=10;strokeColor=#999999;fillColor=#ffffff;" vertex="1" parent="1">
+        <mxCell id="legend" value="Legend&#10;- solid arrow = request / data flow (label = ingress path or port)&#10;- dashed arrow = managed-by / mounts / env injection&#10;hexagon = Ingress · cylinder = stateful store · parallelogram = Secret / PVC" style="text;html=1;align=left;verticalAlign=top;fontSize=10;strokeColor=#999999;fillColor=#ffffff;" vertex="1" parent="1">
           <mxGeometry x="60" y="610" width="600" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="title2" value="OHS — Kubernetes deployment view" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
+        <mxCell id="title2" value="OHS - Kubernetes deployment view" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
           <mxGeometry x="60" y="700" width="500" height="20" as="geometry" />
         </mxCell>
       </root>
@@ -286,7 +286,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <mxCell id="title3" value="OHS — end-to-end data flow: openEHR → FHIR / OMOP CDM → cohort" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
+        <mxCell id="title3" value="OHS - end-to-end data flow: openEHR → FHIR / OMOP CDM → cohort" style="text;html=1;fontStyle=2;fontSize=11;align=left;fontColor=#555555;" vertex="1" parent="1">
           <mxGeometry x="20" y="430" width="600" height="20" as="geometry" />
         </mxCell>
       </root>

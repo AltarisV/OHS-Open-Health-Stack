@@ -11,7 +11,7 @@ The `ohs-credentials` secret must be created before `helm install`:
 | `ehrbase-admin-password` | EHRbase admin API password (used by cohort-explorer-backend) |
 | `openfhir-mongo-uri` | Full MongoDB connection string including password |
 | `eos-db-password` | PostgreSQL password for Eos |
-| `redis-password` | Redis password (not currently used — openEHRTool-v2 Redis runs without auth) |
+| `redis-password` | Redis password (not currently used - openEHRTool-v2 Redis runs without auth) |
 | `openehrtool-jwt-secret` | JWT signing secret for openEHRTool-v2 FastAPI backend |
 | `keycloak-admin-password` | Keycloak admin console password |
 | `keycloak-db-password` | PostgreSQL password for Keycloak |
@@ -44,7 +44,7 @@ Generate a strong password: `openssl rand -base64 32`
 
 ---
 
-## Method 2: Sealed Secrets (Production — GitOps-friendly)
+## Method 2: Sealed Secrets (Production - GitOps-friendly)
 
 Encrypts secrets so they can be safely committed to Git:
 
@@ -59,7 +59,7 @@ kubectl create secret generic ohs-credentials -n ohs --dry-run=client \
 git add ohs-credentials-sealed.yaml  # safe to commit
 ```
 
-**Back up the sealing key** — without it you cannot decrypt:
+**Back up the sealing key** - without it you cannot decrypt:
 
 ```bash
 kubectl get secret -n kube-system -l sealedsecrets.bitnami.com/status=active \

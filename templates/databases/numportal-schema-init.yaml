@@ -6,8 +6,8 @@
 # post-install Job is the correct place for this.
 #
 # Schemas created:
-#   num            — main application schema (Flyway migrations: db/migration/num-portal)
-#   num-attachment — attachment storage schema (Flyway migrations: db/migration/num-portal-attachment)
+#   num            - main application schema (Flyway migrations: db/migration/num-portal)
+#   num-attachment - attachment storage schema (Flyway migrations: db/migration/num-portal-attachment)
 #
 # The Job is idempotent (CREATE SCHEMA IF NOT EXISTS) and safe to re-run on every upgrade.
 apiVersion: batch/v1
@@ -63,7 +63,7 @@ spec:
               echo "==> Waiting for numportal database to exist..."
               until psql "postgresql://numportal@${PG_HOST}/numportal" \
                 -t -c "SELECT 1" | grep -q 1; do
-                echo "    numportal database not yet accessible — retrying in 5s..."
+                echo "    numportal database not yet accessible - retrying in 5s..."
                 sleep 5
               done
               echo "    numportal database accessible."

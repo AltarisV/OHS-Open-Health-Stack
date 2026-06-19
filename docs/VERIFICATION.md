@@ -267,7 +267,7 @@ kubectl patch cronjob -n ohs ohs-ehrsuction \
 
 ## End-to-End Functional Testing
 
-### EHRbase — Create EHR
+### EHRbase - Create EHR
 
 ```bash
 EHRBASE_PASS=$(kubectl get secret -n ohs ohs-credentials \
@@ -301,14 +301,14 @@ curl -s -X POST \
   http://localhost:8080/ehrbase/rest/openehr/v1/query/aql | jq .
 ```
 
-### EHRbase — Blood Pressure Template & Composition
+### EHRbase - Blood Pressure Template & Composition
 
 This repo bundles a real, verified Operational Template and a matching canonical
 composition (sourced from the EHRbase test suite, template_id
 `ehrbase_blood_pressure_simple.de.v0`):
 
-- `docs/templates/ehrbase_blood_pressure_simple.de.v0.opt` — the flattened OPT
-- `docs/templates/ehrbase_blood_pressure_simple.de.v0.json` — a sample composition
+- `docs/templates/ehrbase_blood_pressure_simple.de.v0.opt` - the flattened OPT
+- `docs/templates/ehrbase_blood_pressure_simple.de.v0.json` - a sample composition
 
 Upload the OPT:
 
@@ -353,7 +353,7 @@ curl -s -X POST \
 
 Expected: `[[1]]` (or higher if you submit more than once).
 
-### Eos — Convert EHRs to OMOP
+### Eos - Convert EHRs to OMOP
 
 Trigger EOS to read from EHRbase and write OMOP CDM records.
 
@@ -378,7 +378,7 @@ psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM measuremen
 
 Expected after the composition above is processed: `person` count ≥ 1.
 
-### Cohort Explorer — End-to-End
+### Cohort Explorer - End-to-End
 
 Port-forward all required services (each in a separate terminal):
 
@@ -412,15 +412,15 @@ http://localhost:8085
 ```
 
 Log in with `testuser` / `test123`. After login you land on the Cohort Explorer dashboard.
-To verify the full pipeline: create a new cohort, add a criterion (e.g. Measurement → Blood Pressure Systolic > 0), and execute — the result count should be ≥ 1 if the EOS transformation above completed successfully.
+To verify the full pipeline: create a new cohort, add a criterion (e.g. Measurement → Blood Pressure Systolic > 0), and execute - the result count should be ≥ 1 if the EOS transformation above completed successfully.
 
-### openFHIR — Health & Mapping Engine
+### openFHIR - Health & Mapping Engine
 
-openFHIR is a FHIRConnect **mapping engine** (openEHR ⇄ FHIR), not a FHIR REST server — there is
+openFHIR is a FHIRConnect **mapping engine** (openEHR ⇄ FHIR), not a FHIR REST server - there is
 no `/fhir/Patient` resource API. Verify it is up and that its endpoints respond:
 
 ```bash
-# Liveness — returns 200 "UP"
+# Liveness - returns 200 "UP"
 curl -s http://localhost:8081/health; echo
 
 # List configured FhirConnect model mappings (empty until mappings are loaded)

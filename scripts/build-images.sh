@@ -78,7 +78,7 @@ should_build() {
 
 # ── cohort-explorer-backend ───────────────────────────────────────────────────
 # Uses a multi-stage Dockerfile (generated here) so the Maven build runs inside
-# a JDK 17 container — no host JDK or Maven required.
+# a JDK 17 container - no host JDK or Maven required.
 if should_build "cohort-explorer-backend"; then
   echo "Cloning cohort-explorer-backend..."
   git clone --depth 1 https://github.com/highmed/cohort-explorer-backend \
@@ -141,9 +141,9 @@ if should_build "ehrsuction"; then
     perl -0777 -i -pe \
       's{([ ]{12}aql = \(\n[ ]{16}"SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "\n[ ]{16}"ORDER BY c/context/start_time/value LIMIT \{\} OFFSET \{\}"\n[ ]{12}\)\.format\(limit, offset\)\n)}{            if self.platform == Platforms.EHRBASE:\n                aql = (\n                    "SELECT e/ehr_id/value, c, c/context/start_time/value "\n                    "FROM EHR e CONTAINS COMPOSITION c "\n                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"\n                ).format(limit, offset)\n            else:\n                aql = (\n                    "SELECT e/ehr_id/value, c FROM EHR e CONTAINS COMPOSITION c "\n                    "ORDER BY c/context/start_time/value LIMIT {} OFFSET {}"\n                ).format(limit, offset)\n}' \
       "$EHRSUCTION_CLIENT" \
-    || { echo "ERROR: Could not apply EHRbase ORDER BY patch — upstream changed; inspect request_canonical()." >&2; exit 1; }
+    || { echo "ERROR: Could not apply EHRbase ORDER BY patch - upstream changed; inspect request_canonical()." >&2; exit 1; }
     grep -q 'SELECT e/ehr_id/value, c, c/context/start_time/value' "$EHRSUCTION_CLIENT" \
-      || { echo "ERROR: ORDER BY patch did not apply — pattern not found." >&2; exit 1; }
+      || { echo "ERROR: ORDER BY patch did not apply - pattern not found." >&2; exit 1; }
   fi
 
   # Patch 3: use platform-aware AQL for count_ehrs().
@@ -153,9 +153,9 @@ if should_build "ehrsuction"; then
     perl -0777 -i -pe \
       's{([ ]{8}response = self\.session\.post\(\n[ ]{12}self\.query_endpoint,\n[ ]{12}headers=self\.headers,\n[ ]{12}json=\{"q": "SELECT COUNT\(e\) FROM EHR e"\},\n[ ]{12}auth=self\.auth,\n[ ]{12}verify=False  # This disables SSL verification\n[ ]{8}\)\n)}{        aql = (\n            "SELECT COUNT(e/ehr_id/value) FROM EHR e"\n            if self.platform == Platforms.EHRBASE\n            else "SELECT COUNT(e) FROM EHR e"\n        )\n        response = self.session.post(\n            self.query_endpoint,\n            headers=self.headers,\n            json={"q": aql},\n            auth=self.auth,\n            verify=False  # This disables SSL verification\n        )\n}' \
       "$EHRSUCTION_CLIENT" \
-    || { echo "ERROR: Could not apply EHRbase COUNT patch — upstream changed; inspect count_ehrs()." >&2; exit 1; }
+    || { echo "ERROR: Could not apply EHRbase COUNT patch - upstream changed; inspect count_ehrs()." >&2; exit 1; }
     grep -q 'SELECT COUNT(e/ehr_id/value) FROM EHR e' "$EHRSUCTION_CLIENT" \
-      || { echo "ERROR: COUNT patch did not apply — pattern not found." >&2; exit 1; }
+      || { echo "ERROR: COUNT patch did not apply - pattern not found." >&2; exit 1; }
   fi
 
   echo "EHRsuction patch applied."

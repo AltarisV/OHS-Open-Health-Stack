@@ -2,39 +2,39 @@
 
 ## Immediate: Complete Deployment
 
-Core local/dev deployment is done — `.env` is populated, secrets are derived from it, and
+Core local/dev deployment is done - `.env` is populated, secrets are derived from it, and
 the stack installs and passes e2e verification:
 
 - [x] All secret/password values supplied via `.env` (`ohs-credentials` + the `postgres-*`/`mongodb-*`
-      secrets are built from it by `create-secret.sh` — passwords are **never** read from `values.yaml`)
+      secrets are built from it by `create-secret.sh` - passwords are **never** read from `values.yaml`)
 - [x] Create `ohs-credentials` secret (see [SECRETS.md](SECRETS.md))
 - [x] Install operators (CloudNativePG, MongoDB -- see [DEPLOYMENT.md](DEPLOYMENT.md))
 - [x] `helm install ohs . -f values.yaml -n ohs`
 - [x] Follow [VERIFICATION.md](VERIFICATION.md) to confirm all services are healthy
 
-Remaining `CHANGE_ME` markers in `values.yaml` are **not secrets** — they are environment-specific
+Remaining `CHANGE_ME` markers in `values.yaml` are **not secrets** - they are environment-specific
 config (domain/hostnames, TLS issuer, image registries, storage sizes, namespace, OMOP vocab flag,
 backup path). They are tracked in the section below.
 
 ## Before Internal-Cloud Deployment (egress / external-internal access)
 
-Environment-specific config that needs your real cluster/domain values — not code:
+Environment-specific config that needs your real cluster/domain values - not code:
 
 - [ ] Set the real domain/hostnames (replaces `ohs.example.org`) in `ingress.hosts`,
       `keycloak.config.hostname`/`hostnameUrl`, `cohort-explorer-*` `numUrl`/`api.baseUrl`/`auth.baseUrl`,
       and `corsAllowedOrigins`
 - [ ] Configure the TLS issuer for the internal CA (the default `letsencrypt-prod` only works internet-facing)
-- [ ] Choose a secrets backend for production (Sealed Secrets / ESO / SOPS — see [SECRETS.md](SECRETS.md))
+- [ ] Choose a secrets backend for production (Sealed Secrets / ESO / SOPS - see [SECRETS.md](SECRETS.md))
 - [ ] Load OMOP Athena vocabularies into `eos_omop` (use `load-vocab.sh`), then **restart the Eos pod**
       so it picks up the populated CONCEPT/VOCABULARY tables. Without them, EOS concept mapping is
       skipped and `measurement` stays empty.
-      **Note:** `eos.config.omop.athenaVocabulariesPresent` is informational only — upstream Eos has no
+      **Note:** `eos.config.omop.athenaVocabulariesPresent` is informational only - upstream Eos has no
       runtime toggle for it (it reads the vocab tables directly from the DB), so the flag does not
       gate anything. Loading the tables + restarting the pod is the actual mechanism.
-- [ ] EHRsuction runs with `verify=False` (TLS verification off) — wire in the internal CA bundle
+- [ ] EHRsuction runs with `verify=False` (TLS verification off) - wire in the internal CA bundle
       before exporting over internal HTTPS
 - [ ] Rebuild `openehrtool-frontend` with the internal backend hostname (`OPENEHRTOOL_BACKEND_HOSTNAME`)
-      — it is baked into the JS bundle at build time
+      - it is baked into the JS bundle at build time
 - [ ] Confirm the OHS namespace is labelled `name=<namespace>` so the NetworkPolicy `allow-internal`
       rule matches (required once `networkPolicy.enabled: true`)
 
@@ -62,7 +62,7 @@ Environment-specific config that needs your real cluster/domain values — not c
 
 Three subcharts: `openehrtool-backend` (FastAPI, port 5000), `openehrtool-frontend` (Vue3/nginx, port 80), `openehrtool-redis` (Redis 7).
 
-No published Docker images upstream. Build via `build-images.sh` (clones, patches, builds into the target Docker daemon) — see [GETTING_STARTED.md](GETTING_STARTED.md#building-openehrtool-v2) for the commands and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
+No published Docker images upstream. Build via `build-images.sh` (clones, patches, builds into the target Docker daemon) - see [GETTING_STARTED.md](GETTING_STARTED.md#building-openehrtool-v2) for the commands and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
 
 Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `create-secret.sh`).
 
@@ -70,13 +70,13 @@ One required upstream patch is applied automatically by `build-images.sh`: `SECR
 
 ## Cohort Explorer -- Deployment Notes
 
-No published Docker images. Build via `build-images.sh` — see [GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for the build commands and known build requirements.
+No published Docker images. Build via `build-images.sh` - see [GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for the build commands and known build requirements.
 
 **Prerequisites** (beyond the core stack):
-- **Keycloak** (required — the backend uses it for JWT auth and user management):
+- **Keycloak** (required - the backend uses it for JWT auth and user management):
   - Realm `crr` and both clients (`num-portal`, `num-portal-webapp`) are created
     **automatically** on first startup via `--import-realm` (see `charts/keycloak/templates/configmap-realm.yaml`).
-    Import is idempotent — if the realm already exists it is skipped.
+    Import is idempotent - if the realm already exists it is skipped.
 - Add 6 keys to `ohs-credentials`:
   `keycloak-admin-password`, `keycloak-db-password`,
   `numportal-db-password`, `numportal-keycloak-secret`,

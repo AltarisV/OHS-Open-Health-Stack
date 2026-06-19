@@ -191,7 +191,7 @@ helm template ohs . -f values-prod.yaml | kubeval --strict
 ### Step 7: Deploy with Helm
 
 ```bash
-# IMPORTANT: Always package first — vocab/ is 4.4 GB and will OOM-kill helm if
+# IMPORTANT: Always package first - vocab/ is 4.4 GB and will OOM-kill helm if
 # you pass "." directly. Packaging uses .helmignore to exclude vocab/.
 helm package . -d /tmp/
 
@@ -393,7 +393,7 @@ in [GETTING_STARTED.md](GETTING_STARTED.md#one-time-create-the-attachment-schema
 ### Problem: cohort-explorer-frontend shows "authentication service" error
 
 The Angular production build loads `config.deploy.json`, not `config.json`. Both files
-are now mounted from the same ConfigMap — but if you built an older chart version, only
+are now mounted from the same ConfigMap - but if you built an older chart version, only
 `config.json` was mounted, leaving `config.deploy.json` with Azure DevOps placeholders
 (`#{auth_baseUrl}` etc.) which breaks OIDC init. Upgrade to the latest chart revision.
 
@@ -547,14 +547,16 @@ helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz \
 
 > **Data safety:** The PostgreSQL and MongoDB cluster resources are annotated with
 > `helm.sh/resource-policy: keep`. This means `helm uninstall` intentionally does **not**
-> delete those clusters or their PVCs — your data survives the Helm release removal.
+> delete those clusters or their PVCs - your data survives the Helm release removal.
 > Delete the clusters manually only when you are sure you no longer need the data.
 
 ```bash
-# Remove OHS Helm release (databases are kept — see note above)
+# Remove OHS Helm release (databases are kept - see note above)
 helm uninstall ohs -n ohs
 
-# Optional: delete the database clusters and their PVCs (IRREVERSIBLE — backup first)
+# Optional: delete the database clusters and their PVCs (IRREVERSIBLE - backup first)
+# NOTE: postgres-eos-cluster only exists when postgres.eos.sharedCluster=false. With the
+# shipped default (true), Eos shares postgres-cluster, so omit the postgres-eos-cluster lines.
 kubectl delete cluster postgres-cluster postgres-eos-cluster -n ohs
 kubectl delete mongodbcommunity mongodb-cluster -n ohs
 kubectl delete pvc -n ohs -l cnpg.io/cluster=postgres-cluster
@@ -590,14 +592,14 @@ Operator pre-installation (Step 2) and the `ohs-credentials` secret (Step 5 / [S
 
 ### PostgreSQL Cluster Persistence Across Upgrades
 
-The `postgres-cluster.yaml` Cluster resource is annotated with `helm.sh/resource-policy: keep`, so `helm uninstall` and `helm upgrade` do **not** delete the cluster or its PVCs — data survives. The CNPG operator manages the cluster lifecycle independently of the Helm release.
+The `postgres-cluster.yaml` Cluster resource is annotated with `helm.sh/resource-policy: keep`, so `helm uninstall` and `helm upgrade` do **not** delete the cluster or its PVCs - data survives. The CNPG operator manages the cluster lifecycle independently of the Helm release.
 
 - To fully remove a cluster (and its data), delete it manually: `kubectl delete cluster postgres-cluster -n ohs`.
 - Because the cluster is kept, always reinstall with `helm upgrade --install` to avoid "already exists" errors (see Uninstallation above).
 
 ### Service Ports
 
-See the [Service Ports table in ARCHITECTURE.md](ARCHITECTURE.md#service-ports). Key gotcha: Eos listens on **8081** (`server.port: 8081` in its `application.yml`), not 8080 — its probes and service `targetPort` must use 8081.
+See the [Service Ports table in ARCHITECTURE.md](ARCHITECTURE.md#service-ports). Key gotcha: Eos listens on **8081** (`server.port: 8081` in its `application.yml`), not 8080 - its probes and service `targetPort` must use 8081.
 
 ### CNPG Service Name
 
@@ -609,14 +611,9 @@ Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (
 
 ### MongoDB Image
 
-MongoDB Alpine variants (`mongo:x.y.z-alpine`) were discontinued after version 4.4. The MongoDB Community Operator uses `docker.io/mongodb/mongodb-community-server:<version>-ubi8` automatically when no custom image is specified — do not override the image in `statefulSet.spec.template.spec.containers`.
+MongoDB Alpine variants (`mongo:x.y.z-alpine`) were discontinued after version 4.4. The MongoDB Community Operator uses `docker.io/mongodb/mongodb-community-server:<version>-ubi8` automatically when no custom image is specified - do not override the image in `statefulSet.spec.template.spec.containers`.
 
 ### MongoDB Operator StatefulSet Caution
 
 Do not override `selector.matchLabels`, pod template `metadata.labels`, or `serviceName` inside `statefulSet.spec` in `mongodb-cluster.yaml`. The operator assigns these itself; custom values break the operator-managed service-to-pod selector and the pod will not be discovered.
-
----
-
-**Last Updated**: May 2026  
-**Version**: 0.1.0
 

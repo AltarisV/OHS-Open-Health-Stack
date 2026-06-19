@@ -12,7 +12,7 @@ global:
   imagePullPolicy: "IfNotPresent"  # Options: Always, IfNotPresent, Never
   
   # Intended baseline pod security context. NOTE: not currently wired into the
-  # subchart templates — actual enforcement is the per-workload securityContext
+  # subchart templates - actual enforcement is the per-workload securityContext
   # in each chart's values (all workloads run non-root). Kept as the declared intent.
   podSecurityContext:
     runAsNonRoot: true
@@ -115,7 +115,7 @@ ehrbase:
       cpu: "2000m"
       memory: "4Gi"
 
-  # Application config. These keys MUST live under `config:` — that is the schema the
+  # Application config. These keys MUST live under `config:` - that is the schema the
   # ehrbase subchart reads (.Values.config.*). Keys placed directly under `ehrbase:` are ignored.
   config:
     # Security: basic auth credentials.
@@ -126,7 +126,7 @@ ehrbase:
       username: "ehrbase_user"
       type: "BASIC"  # Options: BASIC, OAUTH2
 
-    # Database connection — CloudNativePG read-write service in this namespace.
+    # Database connection - CloudNativePG read-write service in this namespace.
     # Credentials are injected via the postgres-cluster-app secret
     # (set EHRBASE_DB_PASSWORD in .env, applied by create-secret.sh).
     database:
@@ -177,7 +177,7 @@ openfhir:
       cpu: "2000m"
       memory: "2Gi"
 
-  # Application config. These keys MUST live under `config:` — that is the schema the
+  # Application config. These keys MUST live under `config:` - that is the schema the
   # openfhir subchart reads (.Values.config.*). Keys placed directly under `openfhir:` are ignored.
   config:
     # FHIR server configuration
@@ -231,10 +231,10 @@ eos:
       cpu: "2000m"
       memory: "4Gi"
 
-  # Application config. These keys MUST live under `config:` — that is the schema the
+  # Application config. These keys MUST live under `config:` - that is the schema the
   # eos subchart reads (.Values.config.*). Keys placed directly under `eos:` are ignored.
   config:
-    # Database connection — separate OMOP schema/database on the shared PostgreSQL cluster.
+    # Database connection - separate OMOP schema/database on the shared PostgreSQL cluster.
     # Password is injected via the postgres-eos-user-secret (set EOS_DB_PASSWORD in .env).
     database:
       host: "postgres-cluster-rw.ohs.svc.cluster.local"  # CHANGE_ME: update namespace if not 'ohs'
@@ -251,12 +251,12 @@ eos:
 
     # OMOP vocabularies and concept-mapping files.
     # NOTE: athenaVocabulariesPresent is informational only. Upstream Eos has NO runtime
-    # toggle for it (verified against its application.yml + source) — Eos reads the OMOP
+    # toggle for it (verified against its application.yml + source) - Eos reads the OMOP
     # vocabulary tables straight from the DB. The real requirement is to load the ATHENA
     # vocabularies into eos_omop (use load-vocab.sh) and restart the Eos pod so it picks
     # them up. This key has no effect on the container; it just documents the DB state.
     omop:
-      athenaVocabulariesPresent: false  # documentation flag only — see note above
+      athenaVocabulariesPresent: false  # documentation flag only - see note above
       mappingFilesPath: "/app/mappings"  # ConfigMap-mounted path read by Eos
 
   livenessProbe:
@@ -268,7 +268,7 @@ eos:
 
 # ========== EHRSUCTION ==========
 # EHRsuction exports openEHR compositions from EHRbase to a persistent volume.
-# Deployed as a Kubernetes CronJob. No published image — build with build-images.sh
+# Deployed as a Kubernetes CronJob. No published image - build with build-images.sh
 # (component: ehrsuction) and push to your registry.
 ehrsuction:
   enabled: true

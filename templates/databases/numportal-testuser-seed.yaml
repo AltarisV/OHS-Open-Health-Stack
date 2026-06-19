@@ -1,7 +1,7 @@
 {{- if and .Values.keycloak.config.testUser.enabled (index .Values "cohort-explorer-backend" "enabled") }}
 ---
 # Post-install Job that seeds testuser into num.user_details.
-# NUMportal does not auto-create users on first authenticated request — the row must
+# NUMportal does not auto-create users on first authenticated request - the row must
 # exist and be approved before any authenticated API call succeeds.
 # Runs after numportal-schema-init (weight 5); waits for Flyway to create the table.
 apiVersion: batch/v1
@@ -78,7 +78,7 @@ spec:
                 "${KC_URL}/auth/admin/realms/crr/users?username=testuser")
               USER_ID=$(echo "$USER_JSON" | tr -d '\n\r' | grep -o '"id":"[0-9a-f-]*"' | head -1 | cut -d'"' -f4)
               if [ -z "$USER_ID" ]; then
-                echo "ERROR: testuser not found in Keycloak crr realm — ensure keycloak.config.testUser.enabled=true and realm was imported" >&2
+                echo "ERROR: testuser not found in Keycloak crr realm - ensure keycloak.config.testUser.enabled=true and realm was imported" >&2
                 exit 1
               fi
               echo "    testuser UUID: ${USER_ID}"

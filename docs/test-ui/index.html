@@ -150,7 +150,7 @@
 
 <!-- STEP 1: Create EHR -->
 <div class="panel" id="panel-s1">
-  <h2>Step 1 — Create EHR</h2>
+  <h2>Step 1 - Create EHR</h2>
   <p class="desc">Creates a new Electronic Health Record in EHRbase for a test patient. The resulting EHR ID is stored and used in subsequent steps.</p>
   <div class="card">
     <h3>Parameters</h3>
@@ -173,8 +173,8 @@
 
 <!-- STEP 2: Upload Template -->
 <div class="panel" id="panel-s2">
-  <h2>Step 2 — Upload Blood Pressure Template</h2>
-  <p class="desc">Uploads the <code>ehrbase_blood_pressure_simple.de.v0</code> Operational Template to EHRbase. This only needs to be done once — subsequent uploads of the same template ID are rejected with 409 (that's fine).</p>
+  <h2>Step 2 - Upload Blood Pressure Template</h2>
+  <p class="desc">Uploads the <code>ehrbase_blood_pressure_simple.de.v0</code> Operational Template to EHRbase. This only needs to be done once - subsequent uploads of the same template ID are rejected with 409 (that's fine).</p>
   <div class="card">
     <h3>Template</h3>
     <div class="fields">
@@ -197,7 +197,7 @@
 
 <!-- STEP 3: Submit Composition -->
 <div class="panel" id="panel-s3">
-  <h2>Step 3 — Submit Blood Pressure Composition</h2>
+  <h2>Step 3 - Submit Blood Pressure Composition</h2>
   <p class="desc">Submits a blood pressure observation into the EHR created in Step 1.</p>
   <div class="card">
     <h3>Values</h3>
@@ -229,13 +229,13 @@
 
 <!-- STEP 4: EOS -->
 <div class="panel" id="panel-s4">
-  <h2>Step 4 — EOS OMOP Transformation</h2>
+  <h2>Step 4 - EOS OMOP Transformation</h2>
   <p class="desc">EOS reads from EHRbase and writes OMOP CDM records into PostgreSQL. Run the two endpoints <strong>in order</strong>:</p>
   <ol class="desc" style="margin: -12px 0 16px 20px; line-height: 2;">
-    <li><strong>POST /person</strong> — maps EHR subjects → OMOP <code>person</code> table. Run this first.</li>
-    <li><strong>POST /ehr</strong> — maps compositions → OMOP clinical records (<code>measurement</code>, etc.). Requires persons to exist.</li>
+    <li><strong>POST /person</strong> - maps EHR subjects → OMOP <code>person</code> table. Run this first.</li>
+    <li><strong>POST /ehr</strong> - maps compositions → OMOP clinical records (<code>measurement</code>, etc.). Requires persons to exist.</li>
   </ol>
-  <p class="desc" style="margin-top:-8px;">⚠ Without Athena vocabularies loaded and <code>athenaVocabulariesPresent=true</code> in EOS config, concept mapping is skipped and <code>measurement</code> stays empty — that is expected on a default install.</p>
+  <p class="desc" style="margin-top:-8px;">⚠ Without Athena vocabularies loaded and <code>athenaVocabulariesPresent=true</code> in EOS config, concept mapping is skipped and <code>measurement</code> stays empty - that is expected on a default install.</p>
   <div class="card">
     <h3>Trigger (run in order)</h3>
     <div class="actions">
@@ -256,7 +256,7 @@
 
 <!-- STEP 5: Keycloak Login -->
 <div class="panel" id="panel-s5">
-  <h2>Step 5 — Keycloak Login</h2>
+  <h2>Step 5 - Keycloak Login</h2>
   <p class="desc">Fetches a JWT access token for the test user. The token is stored and used in Step 6 to query the Cohort Explorer API.</p>
   <div class="card">
     <h3>Credentials</h3>
@@ -281,7 +281,7 @@
 
 <!-- STEP 6: Cohort Explorer -->
 <div class="panel" id="panel-s6">
-  <h2>Step 6 — Cohort Explorer API</h2>
+  <h2>Step 6 - Cohort Explorer API</h2>
   <p class="desc">Queries the Cohort Explorer backend using the JWT token from Step 5.</p>
   <div class="card">
     <h3>Queries</h3>
@@ -302,8 +302,8 @@
 
 <!-- STEP 7: openFHIR -->
 <div class="panel" id="panel-s7">
-  <h2>openFHIR — Mapping Engine</h2>
-  <p class="desc">openFHIR is a FHIRConnect <strong>mapping engine</strong> (openEHR ⇄ FHIR), not a FHIR REST server — there is no <code>/fhir/Patient</code> API. Verify liveness and configured mappings.</p>
+  <h2>openFHIR - Mapping Engine</h2>
+  <p class="desc">openFHIR is a FHIRConnect <strong>mapping engine</strong> (openEHR ⇄ FHIR), not a FHIR REST server - there is no <code>/fhir/Patient</code> API. Verify liveness and configured mappings.</p>
   <div class="card">
     <h3>Queries</h3>
     <div class="actions">
@@ -421,9 +421,9 @@ async function loadBundledTemplate() {
   setStatus('s2-status', 'Loading bundled OPT...', 'running');
   try {
     const r = await fetch(OPT_URL);
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' — serve the docs dir (see header note)');
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' - serve the docs dir (see header note)');
     document.getElementById('s2-opt').value = await r.text();
-    setStatus('s2-status', '✓ OPT loaded — click Upload', 'ok');
+    setStatus('s2-status', '✓ OPT loaded - click Upload', 'ok');
   } catch(e) {
     setStatus('s2-status', '✗ ' + e.message, 'err');
   }
@@ -461,7 +461,7 @@ async function step2() {
 // ── Step 3: Submit Composition ────────────────────────────────────────────
 async function step3() {
   const ehrId = val('s3-ehr-id') || state.ehrId;
-  if (!ehrId) { alert('No EHR ID — run Step 1 first.'); return; }
+  if (!ehrId) { alert('No EHR ID - run Step 1 first.'); return; }
   const sys = parseFloat(val('s3-sys'));
   const dia = parseFloat(val('s3-dia'));
   const dt = val('s3-datetime');
@@ -471,7 +471,7 @@ async function step3() {
   let body;
   try {
     const cr = await fetch(COMP_URL);
-    if (!cr.ok) throw new Error('HTTP ' + cr.status + ' loading bundled composition — serve the docs dir');
+    if (!cr.ok) throw new Error('HTTP ' + cr.status + ' loading bundled composition - serve the docs dir');
     body = await cr.json();
     // Blood pressure items: [0]=systolic, [1]=diastolic (mm[Hg]).
     const items = body.content[0].data.events[0].data.items;
@@ -570,7 +570,7 @@ async function step5() {
 // ── Step 6: Cohort Explorer ───────────────────────────────────────────────
 async function s6query(path, respId) {
   const token = state.token;
-  if (!token) { alert('No token — run Step 5 first.'); return; }
+  if (!token) { alert('No token - run Step 5 first.'); return; }
   setStatus('s6-status', 'Querying ' + path + '...', 'running');
   const boxId = respId + '-box';
   try {

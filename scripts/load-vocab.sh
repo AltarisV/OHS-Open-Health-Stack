@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# load-vocab.sh — Streams ATHENA vocabulary CSVs into the OMOP CDM schema.
+# load-vocab.sh - Streams ATHENA vocabulary CSVs into the OMOP CDM schema.
 #
 # This is a one-time operation.  Once loaded the data persists in the CNPG PVC
 # and survives pod restarts / Helm upgrades.
@@ -64,7 +64,7 @@ psql_exec() {
 }
 
 # Stream a local CSV into the database via COPY FROM STDIN.
-# This never copies the file to the pod — data is piped through kubectl exec.
+# This never copies the file to the pod - data is piped through kubectl exec.
 post_load_steps() {
   echo ""
   echo "======================================================"
@@ -97,7 +97,7 @@ post_load_steps() {
     fi
 
     if [[ "$EOS_READY" != "True" ]]; then
-      echo "2. Eos pod is not Ready — restarting to pick up loaded vocabularies ..."
+      echo "2. Eos pod is not Ready - restarting to pick up loaded vocabularies ..."
       kube rollout restart deployment "$EOS_DEPLOY" -n "$NAMESPACE" && \
         echo "   Restarted. Monitor: $KUBECTL rollout status deployment/$EOS_DEPLOY -n $NAMESPACE" || \
         echo "   Restart failed. Try: $KUBECTL delete pod -n $NAMESPACE $EOS_POD"
@@ -122,7 +122,7 @@ load_table() {
   local pod="$3"
 
   if [[ ! -f "$csv_file" ]]; then
-    echo "  [SKIP] $table — $(basename "$csv_file") not found"
+    echo "  [SKIP] $table - $(basename "$csv_file") not found"
     return 0
   fi
 
@@ -143,7 +143,7 @@ load_table() {
     row_count=$(psql_exec "$pod" -t -c \
       "SELECT COUNT(*) FROM ${CDM_SCHEMA}.${table};" 2>/dev/null | tr -d ' \n')
     if [[ "$row_count" =~ ^[0-9]+$ && "$row_count" -gt 0 ]]; then
-      echo "  [SKIP] $table ($size) — already loaded ($row_count rows)"
+      echo "  [SKIP] $table ($size) - already loaded ($row_count rows)"
       return 0
     fi
   fi
@@ -158,7 +158,7 @@ load_table() {
   # We prepend SQL lines before the CSV data so psql (via -f -) processes them
   # in the same session/stream:
   #
-  #   SET session_replication_role = replica — disables FK trigger checks.
+  #   SET session_replication_role = replica - disables FK trigger checks.
   #     Required for circular FK refs (concept ↔ concept_class ↔ domain ↔ vocab).
   #     Automatically resets when the session ends.
   #
@@ -166,7 +166,7 @@ load_table() {
   #     vocabulary.vocabulary_version has its incorrect NOT NULL constraint dropped
   #     in the schema pre-flight below, so NULL is safe there too.
   #
-  #   -v ON_ERROR_STOP=1 — make psql exit immediately on any SQL error instead of
+  #   -v ON_ERROR_STOP=1 - make psql exit immediately on any SQL error instead of
   #     continuing to read the remaining CSV bytes as SQL statements.
   {
     printf "SET session_replication_role = replica;\n"
@@ -213,13 +213,13 @@ TABLE_COUNT=$(psql_exec "$PRIMARY_POD" -t -c \
 
 if [[ "$TABLE_COUNT" != "1" ]]; then
   echo "ERROR: OMOP CDM tables not found in schema '${CDM_SCHEMA}' of database '${DB_NAME}'." >&2
-  echo "  Eos must be deployed and started at least once — Hibernate creates the tables on first boot." >&2
+  echo "  Eos must be deployed and started at least once - Hibernate creates the tables on first boot." >&2
   echo "  Check Eos pod:  $KUBECTL get pods -n $NAMESPACE -l app.kubernetes.io/name=eos" >&2
   echo "  Check Eos logs: $KUBECTL logs -n $NAMESPACE -l app.kubernetes.io/name=eos --tail=50" >&2
   exit 1
 fi
 
-# Check whether vocab is fully loaded (use drug_strength as the final sentinel —
+# Check whether vocab is fully loaded (use drug_strength as the final sentinel -
 # only present and populated when the entire pipeline completed successfully).
 DRUG_COUNT=$(psql_exec "$PRIMARY_POD" -t -c "
   SELECT COUNT(*) FROM information_schema.tables
@@ -241,12 +241,12 @@ if [[ "$DRUG_COUNT" =~ ^[0-9]+$ && "$DRUG_COUNT" -gt 0 ]]; then
     post_load_steps
     exit 0
   else
-    echo "Vocabulary present (drug_strength: ${DRUG_COUNT} rows) — FORCE_RELOAD=1, reloading all tables ..."
+    echo "Vocabulary present (drug_strength: ${DRUG_COUNT} rows) - FORCE_RELOAD=1, reloading all tables ..."
     echo ""
   fi
 fi
 
-echo "Loading vocabulary tables (streaming via stdin — no file transfer to pod)..."
+echo "Loading vocabulary tables (streaming via stdin - no file transfer to pod)..."
 if command -v pv &>/dev/null; then
   echo "  progress: pv $(pv --version | head -1)"
 else
@@ -340,7 +340,7 @@ FROM (
   UNION ALL SELECT 'concept_ancestor',         COUNT(*) FROM ${CDM_SCHEMA}.concept_ancestor
   UNION ALL SELECT 'concept_synonym',          COUNT(*) FROM ${CDM_SCHEMA}.concept_synonym
   UNION ALL SELECT 'drug_strength',            COUNT(*) FROM ${CDM_SCHEMA}.drug_strength
-) t ORDER BY table_name;" || echo "  WARNING: verification query failed (transient connection drop) — data was written, continuing to index creation."
+) t ORDER BY table_name;" || echo "  WARNING: verification query failed (transient connection drop) - data was written, continuing to index creation."
 
 echo ""
 echo "Vocabulary loaded successfully."
@@ -365,7 +365,7 @@ if command -v curl &>/dev/null; then
 elif command -v wget &>/dev/null; then
   wget -qO "$TMP_IDX" "$INDICES_URL"
 else
-  echo "  WARNING: Neither curl nor wget found — skipping index creation."
+  echo "  WARNING: Neither curl nor wget found - skipping index creation."
   echo "  Download manually: $INDICES_URL"
   echo "  Replace @cdmDatabaseSchema with '$CDM_SCHEMA' and run against $DB_NAME."
   TMP_IDX=""
@@ -375,7 +375,7 @@ if [[ -n "$TMP_IDX" && -s "$TMP_IDX" ]]; then
   # Replace placeholder with the configured schema
   sed -i "s/@cdmDatabaseSchema/${CDM_SCHEMA}/g" "$TMP_IDX"
 
-  # Strip CLUSTER commands — CLUSTER physically rewrites the entire table sorted
+  # Strip CLUSTER commands - CLUSTER physically rewrites the entire table sorted
   # by the index.  On constrained environments (minikube) it can run for many
   # hours on large tables like concept_ancestor (69M rows).  The indices alone
   # provide the query-performance benefit; CLUSTER is a marginal extra optimisation
@@ -402,7 +402,7 @@ if [[ -n "$TMP_IDX" && -s "$TMP_IDX" ]]; then
     ALTER TABLE ${CDM_SCHEMA}.domain        ADD PRIMARY KEY (domain_id);
     ALTER TABLE ${CDM_SCHEMA}.vocabulary    ADD PRIMARY KEY (vocabulary_id);
     ALTER TABLE ${CDM_SCHEMA}.relationship  ADD PRIMARY KEY (relationship_id);
-  " 2>&1 | grep -v '^$' || echo "  WARNING: some PKs may already exist (FORCE_RELOAD run) — continuing."
+  " 2>&1 | grep -v '^$' || echo "  WARNING: some PKs may already exist (FORCE_RELOAD run) - continuing."
   echo " Primary keys restored."
 fi
 

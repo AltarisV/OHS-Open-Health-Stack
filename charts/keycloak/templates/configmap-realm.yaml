@@ -1,7 +1,7 @@
 {{- if .Values.config.realmImport.enabled }}
 # ConfigMap holding the crr realm definition for automatic import on first startup.
 # Keycloak reads files from /opt/keycloak/data/import/ when started with --import-realm.
-# If the realm already exists (e.g. after a helm upgrade), Keycloak skips the import — it is idempotent.
+# If the realm already exists (e.g. after a helm upgrade), Keycloak skips the import - it is idempotent.
 #
 # The string __NUM_PORTAL_CLIENT_SECRET__ is a placeholder replaced at pod start time
 # by a busybox initContainer using the value from ohs-credentials/numportal-keycloak-secret.
