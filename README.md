@@ -18,6 +18,43 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **CSV-to-openEHR**             | Bulk import from CSV                    | Placeholder    |                                                                                     |
 | **BETTER Platform**            | External EHR at Charité                 | Reference only |                                                                                     |
 
+## Architecture
+
+How data flows through the stack — captured as openEHR in EHRbase, then bridged to
+FHIR (openFHIR) and transformed to the OMOP CDM (Eos) for analytics:
+
+```mermaid
+flowchart TB
+    src["External source /<br/>openEHRTool-v2"]:::ext
+
+    subgraph apps["Application services"]
+        ehrbase["EHRbase<br/>openEHR EHR store"]:::app
+        openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
+        eos["Eos<br/>openEHR → OMOP ETL"]:::app
+    end
+
+    subgraph data["Data stores"]
+        pg_ehr[("PostgreSQL<br/>ehrbase DB")]:::db
+        mongo[("MongoDB<br/>FHIR cache")]:::db
+        pg_omop[("PostgreSQL<br/>eos_omop DB<br/>OMOP CDM")]:::db
+    end
+
+    src -->|"REST: create EHR / compositions"| ehrbase
+    ehrbase --> pg_ehr
+    openfhir -->|"reads compositions"| ehrbase
+    openfhir -->|"FHIR resources"| mongo
+    eos -->|"reads compositions"| ehrbase
+    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+
+    classDef ext fill:#eeeeee,stroke:#777777,color:#222;
+    classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
+    classDef db  fill:#e6f2e6,stroke:#4f8a4f,color:#222;
+```
+
+The Kubernetes deployment view and the full end-to-end data flow are in
+[docs/diagrams/](docs/diagrams/) (editable [`architecture.drawio`](docs/diagrams/architecture.drawio)
+plus a Mermaid source). See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions.
+
 ## Quick Start
 
 See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Docker Desktop setup.
