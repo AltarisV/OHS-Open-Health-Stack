@@ -29,9 +29,10 @@ Eos requires OMOP ATHENA vocabularies to be pre-loaded into the PostgreSQL OMOP 
    - Requires account registration (free)
    - Download all vocabulary files for your OMOP version
 
-2. **Create script to load vocabularies**:
+2. **Load the vocabularies** with the repo's helper script, which streams the CSVs
+   into the `eos_omop` database via `COPY FROM STDIN` (run from the repo root):
    ```bash
-   # psql -h postgres-cluster -U eos -d eos_omop -f athena-vocabularies.sql
+   bash scripts/load-vocab.sh   # place the Athena CSVs in vocab/ first
    ```
 
 3. **Once loaded, set in values.yaml**:

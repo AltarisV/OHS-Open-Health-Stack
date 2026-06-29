@@ -65,7 +65,7 @@ ohs/
 |----------|--------|-----------|
 | Database operators | CloudNativePG + MongoDB Community Operator | HA, automated backups, operator pattern is Kubernetes-native |
 | Packaging | Umbrella Helm chart | Single deploy command for entire stack |
-| Custom images | openEHRTool-v2 and Cohort Explorer (no upstream images) | All other components have published images; `build-images.sh` handles both |
+| Custom images | openEHRTool-v2 and Cohort Explorer (no upstream images) | All other components have published images; `scripts/build-images.sh` handles both |
 | Staged subcharts | Base profile keeps some components off until image and config paths are finalized | Preserves a runnable default while the target state remains the full stack |
 | Secret management | External to chart (kubectl / Sealed Secrets / ESO) | Secrets never committed to Git |
 

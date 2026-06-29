@@ -20,12 +20,17 @@ helm install mongodb-operator mongodb/community-operator -n mongodb-operator --c
 kubectl create namespace ohs
 kubectl label namespace ohs name=ohs
 cp .env.example .env  # fill in all values, then:
-bash create-secret.sh
+bash scripts/create-secret.sh
 
-# 3. Deploy
+# 3. Build the self-hosted images (openEHRTool-v2, EHRsuction, Cohort Explorer
+#    have no published images). For local Docker Desktop, build without pushing:
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
+  bash scripts/build-images.sh --registry localhost:5000 --skip-push
+
+# 4. Deploy
 helm install ohs . -f values.yaml -n ohs
 
-# 4. Watch pods (databases take 5-15 min)
+# 5. Watch pods (databases take 5-15 min)
 kubectl get pods -n ohs -w
 ```
 
@@ -41,17 +46,20 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for full prerequisites and production notes.
 
 ## Access the Services
 
-Run each in a separate terminal:
+The quickest way is `scripts/port-forward.sh`, which forwards every service on the
+ports listed below in a single command (Ctrl+C stops all of them):
+
+```bash
+bash scripts/port-forward.sh          # defaults to the "ohs" namespace
+bash scripts/port-forward.sh my-ns    # or pass a custom namespace
+```
+
+To forward services individually instead, run each in a separate terminal:
 
 ```bash
 kubectl port-forward svc/ohs-ehrbase 8080:8080 -n ohs
 kubectl port-forward svc/ohs-openfhir 8081:8080 -n ohs
 kubectl port-forward svc/ohs-eos 8082:8081 -n ohs
-```
-
-Add the Cohort Explorer and Keycloak forwards:
-
-```bash
 kubectl port-forward svc/ohs-keycloak 8083:8080 -n ohs
 kubectl port-forward svc/ohs-cohort-explorer-backend 8084:8090 -n ohs
 kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
@@ -108,8 +116,8 @@ docker build --build-arg ENVIRONMENT=deploy \
 **Local development (no registry):** Docker Desktop shares the host Docker daemon - images built locally are immediately visible to Kubernetes without a registry:
 
 ```bash
-bash build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
-bash build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
+bash scripts/build-images.sh --registry localhost:5000 --component cohort-explorer-backend --skip-push
+bash scripts/build-images.sh --registry localhost:5000 --component cohort-explorer-frontend --skip-push
 ```
 
 **Known build requirements for cohort-explorer-backend:**
@@ -225,24 +233,24 @@ done
 
 ## Building openEHRTool-v2
 
-No published Docker images exist upstream. Use `build-images.sh` - it clones the upstream repo into a temp directory, applies required patches, builds the images, and cleans up. The repo is never stored in the workspace.
+No published Docker images exist upstream. Use `scripts/build-images.sh` - it clones the upstream repo into a temp directory, applies required patches, builds the images, and cleans up. The repo is never stored in the workspace.
 
 ```bash
 # For a registry-based workflow (standard Kubernetes)
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry your-registry.example.org:5000 \
+  bash scripts/build-images.sh --registry your-registry.example.org:5000 \
     --component openehrtool-backend
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry your-registry.example.org:5000 \
+  bash scripts/build-images.sh --registry your-registry.example.org:5000 \
     --component openehrtool-frontend
 ```
 
 **Local development (Docker Desktop, no registry):**
 
 ```bash
-bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+bash scripts/build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
 OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
+  bash scripts/build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
 
 `OPENEHRTOOL_BACKEND_HOSTNAME` is baked into the Vue/Vite bundle at build time. Use `localhost` for local access via `kubectl port-forward`. For production, set it to the ingress hostname that matches `openehrtool-backend.ingress.host`.

@@ -65,7 +65,14 @@ plus a Mermaid source). See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for design d
 
 See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for the full guide, including operator pre-installation, local image builds, and Docker Desktop setup.
 
-Standard Kubernetes deployment:
+> **Prerequisite:** The CloudNativePG and MongoDB Community operators must be installed
+> cluster-wide *before* deploying OHS. See [DEPLOYMENT.md](docs/DEPLOYMENT.md#step-2-install-the-required-operators).
+
+> **Heads up:** openEHRTool-v2, EHRsuction, and Cohort Explorer have no published images at this time
+> and **must be built from source** (`scripts/build-images.sh`) before `helm install`, or
+> those pods will fail to pull. The build step is included below.
+
+Standard Kubernetes deployment (custom registry):
 
 ```bash
 kubectl create namespace ohs --dry-run=client -o yaml | kubectl apply -f -
@@ -74,26 +81,39 @@ kubectl label namespace ohs name=ohs --overwrite
 cp .env.example .env
 # Fill in your local or deployment-specific passwords.
 
-bash create-secret.sh
+bash scripts/create-secret.sh
+
+# Build and push the self-hosted images, then point values.yaml at your registry.
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool-api.example.org \
+  bash scripts/build-images.sh --registry registry.example.org/ohs
 
 helm upgrade --install ohs . -n ohs -f values.yaml
 
 kubectl get pods -n ohs -w
 ```
 
-Optional local deployment (Docker Desktop Kubernetes):
+Local deployment:
 
 ```bash
-# Build local images required by components without published images.
-# Docker Desktop shares the host Docker daemon - no eval step needed.
-OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash build-images.sh --registry localhost:5000 --skip-push
+cp .env.example .env
+# Fill in your local passwords.
 
-bash create-secret.sh
+bash scripts/create-secret.sh
+
+# Build local images required by components without published images.
+# Docker Desktop shares the host Docker daemon - no registry push needed.
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
+  bash scripts/build-images.sh --registry localhost:5000 --skip-push
 
 helm upgrade --install ohs . -n ohs -f values.yaml -f values-local.yaml --timeout 15m
 
 kubectl get pods -n ohs -w
+```
+
+Once pods are running, forward all service ports to localhost with a single command:
+
+```bash
+bash scripts/port-forward.sh
 ```
 
 ## Documentation
@@ -116,8 +136,11 @@ ohs/
 ├── Chart.yaml                    # Umbrella chart
 ├── values.yaml                   # Base configuration
 ├── values-local.yaml             # Local Docker Desktop overrides
-├── create-secret.sh              # Creates required Kubernetes secrets from .env
-├── build-images.sh               # Builds self-hosted component images from source
+├── scripts/
+│   ├── create-secret.sh          # Creates required Kubernetes secrets from .env
+│   ├── build-images.sh           # Builds self-hosted component images from source
+│   ├── load-vocab.sh             # Loads OMOP Athena vocabularies into the eos_omop DB
+│   └── port-forward.sh           # Forwards all OHS service ports to localhost
 ├── charts/                       # Subcharts
 ├── templates/
 │   ├── ingress.yaml
@@ -136,11 +159,11 @@ ohs/
 
 ## Local Image Builds
 
-openEHRTool-v2, EHRsuction, and Cohort Explorer have no suitable published images and are built from source with `build-images.sh`. Build all at once:
+openEHRTool-v2, EHRsuction, and Cohort Explorer have no suitable published images and are built from source with `scripts/build-images.sh`. Build all at once:
 
 ```bash
 OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash build-images.sh --registry localhost:5000 --skip-push
+  bash scripts/build-images.sh --registry localhost:5000 --skip-push
 ```
 
 See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for per-component builds and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
@@ -165,10 +188,11 @@ Exported files are written to the `ohs-ehrsuction-export` PVC.
 ## Key Notes
 
 * **Operators must be pre-installed**: CloudNativePG and MongoDB Community Operator are required before installing the chart.
-* **Secrets are externalized**: copy `.env.example` to `.env`, fill in values, and run `create-secret.sh`.
+* **Secrets are externalized**: copy `.env.example` to `.env`, fill in values, and run `scripts/create-secret.sh`.
 * **Local Docker Desktop uses `values-local.yaml`**: this profile reduces database replicas, disables selected probes, and uses locally built images.
 * **Eos runs on port `8081`**: probes and service `targetPort` are configured accordingly.
+* **Eos needs OMOP vocabularies**: load Athena vocabularies into the `eos_omop` DB once with `scripts/load-vocab.sh`, then restart the Eos pod. Without them, concept mapping is skipped.
 * **EHRsuction runs as a CronJob**: exports are written to a persistent volume and can be triggered manually or by schedule.
-* **openEHRTool-v2, EHRsuction and Cohort Explorer require local/self-hosted image builds**: use `build-images.sh`.
+* **openEHRTool-v2, EHRsuction and Cohort Explorer require local/self-hosted image builds**: use `scripts/build-images.sh`.
 * **Cohort Explorer and Keycloak are enabled in the local profile**: configure image coordinates, domains, and secrets before deploying on standard Kubernetes.
 * **PostgreSQL and MongoDB data are persistent**: verify hook policies, storage classes, backup configuration, and deletion behavior before production use.

@@ -165,16 +165,35 @@ The chart references the `ohs-credentials` secret but does not create it. It mus
 ```bash
 cp .env.example .env
 # edit .env with your passwords
-bash create-secret.sh
+bash scripts/create-secret.sh
 ```
 
-`create-secret.sh` reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is the committed template.
+`scripts/create-secret.sh` reads `.env` and assembles the full MongoDB URI automatically. `.env` is gitignored; `.env.example` is the committed template.
 
 The complete list of required keys and the Sealed Secrets / External Secrets Operator / SOPS alternatives for production are documented in **[SECRETS.md](SECRETS.md)**.
 
 > **Note:** The password in `openfhir-mongo-uri` **must exactly match** `mongodb.openfhir.userPassword` in your values file, or openFHIR fails SCRAM authentication at startup.
 
-### Step 6: Validate Helm Chart
+### Step 6: Build the Self-Hosted Images
+
+openEHRTool-v2, EHRsuction, and Cohort Explorer have **no published images** and must be
+built from source before `helm install`, or those pods stay in `ImagePullBackOff`.
+`scripts/build-images.sh` clones each upstream repo into a temp directory, applies the
+required patches, builds the images, and (unless `--skip-push`) pushes them to your registry.
+
+```bash
+# Push to your registry (standard Kubernetes). Set the backend hostname that the
+# openEHRTool frontend bundle should call (must match its ingress host).
+OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool-api.yourdomain.org \
+  bash scripts/build-images.sh --registry registry.yourdomain.org/ohs --tag v1.0.0
+```
+
+Then point the relevant `image.repository`/`image.tag` values in your custom values file at
+the registry coordinates printed at the end of the build. See
+[GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for per-component
+builds and the `OPENEHRTOOL_BACKEND_HOSTNAME` details, and [VALUES.md](VALUES.md) for the image keys.
+
+### Step 7: Validate Helm Chart
 
 ```bash
 # Lint the chart for syntax errors
@@ -188,7 +207,7 @@ cat /tmp/ohs-manifests.yaml | head -100
 helm template ohs . -f values-prod.yaml | kubeval --strict
 ```
 
-### Step 7: Deploy with Helm
+### Step 8: Deploy with Helm
 
 ```bash
 # IMPORTANT: Always package first - vocab/ is 4.4 GB and will OOM-kill helm if
@@ -222,7 +241,7 @@ helm status ohs -n ohs
 helm get values ohs -n ohs
 ```
 
-### Step 8: Wait for Components to Initialize
+### Step 9: Wait for Components to Initialize
 
 ```bash
 # Database operators typically start first (2-5 minutes)
@@ -607,7 +626,14 @@ CloudNativePG creates the read-write service as `<cluster-name>-rw`, not `<clust
 
 ### Eos OMOP CDM Setup
 
-Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (`ddl-auto: update`) automatically creates entity-mapped tables. However, the OMOP **vocabulary tables** (CONCEPT, VOCABULARY, DOMAIN, etc.) are not created automatically and must be populated from [Athena](https://athena.ohdsi.org/) before mappings will function correctly. See VERIFICATION.md for the loading procedure.
+Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (`ddl-auto: update`) automatically creates entity-mapped tables. However, the OMOP **vocabulary tables** (CONCEPT, VOCABULARY, DOMAIN, etc.) are not created automatically and must be populated from [Athena](https://athena.ohdsi.org/) before mappings will function correctly.
+
+Download the vocabulary CSVs from Athena into the `vocab/` directory, then stream them into the `eos_omop` database with the helper script (a one-time operation - the data persists in the CNPG PVC):
+
+```bash
+bash scripts/load-vocab.sh            # NAMESPACE, VOCAB_DIR, DB_NAME, etc. are overridable env vars
+kubectl rollout restart deployment/ohs-eos -n ohs   # restart Eos to pick up the populated tables
+```
 
 ### MongoDB Image
 

@@ -6,7 +6,7 @@ Core local/dev deployment is done - `.env` is populated, secrets are derived fro
 the stack installs and passes e2e verification:
 
 - [x] All secret/password values supplied via `.env` (`ohs-credentials` + the `postgres-*`/`mongodb-*`
-      secrets are built from it by `create-secret.sh` - passwords are **never** read from `values.yaml`)
+      secrets are built from it by `scripts/create-secret.sh` - passwords are **never** read from `values.yaml`)
 - [x] Create `ohs-credentials` secret (see [SECRETS.md](SECRETS.md))
 - [x] Install operators (CloudNativePG, MongoDB -- see [DEPLOYMENT.md](DEPLOYMENT.md))
 - [x] `helm install ohs . -f values.yaml -n ohs`
@@ -25,7 +25,7 @@ Environment-specific config that needs your real cluster/domain values - not cod
       and `corsAllowedOrigins`
 - [ ] Configure the TLS issuer for the internal CA (the default `letsencrypt-prod` only works internet-facing)
 - [ ] Choose a secrets backend for production (Sealed Secrets / ESO / SOPS - see [SECRETS.md](SECRETS.md))
-- [ ] Load OMOP Athena vocabularies into `eos_omop` (use `load-vocab.sh`), then **restart the Eos pod**
+- [ ] Load OMOP Athena vocabularies into `eos_omop` (use `scripts/load-vocab.sh`), then **restart the Eos pod**
       so it picks up the populated CONCEPT/VOCABULARY tables. Without them, EOS concept mapping is
       skipped and `measurement` stays empty.
       **Note:** `eos.config.omop.athenaVocabulariesPresent` is informational only - upstream Eos has no
@@ -54,7 +54,7 @@ Environment-specific config that needs your real cluster/domain values - not cod
 
 1. **Deploy and verify the core stack** (EHRbase + openFHIR + Eos) -- everything else depends on this
 2. **Production hardening** -- backups, HTTPS, monitoring before handling real patient data
-3. **openEHRTool-v2** -- deployed; use `build-images.sh` to rebuild if upstream changes
+3. **openEHRTool-v2** -- deployed; use `scripts/build-images.sh` to rebuild if upstream changes
 4. **Data mirroring** -- BETTER Platform integration for multi-site data
 5. **CSV import** -- remaining data onboarding tooling
 
@@ -62,15 +62,15 @@ Environment-specific config that needs your real cluster/domain values - not cod
 
 Three subcharts: `openehrtool-backend` (FastAPI, port 5000), `openehrtool-frontend` (Vue3/nginx, port 80), `openehrtool-redis` (Redis 7).
 
-No published Docker images upstream. Build via `build-images.sh` (clones, patches, builds into the target Docker daemon) - see [GETTING_STARTED.md](GETTING_STARTED.md#building-openehrtool-v2) for the commands and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
+No published Docker images upstream. Build via `scripts/build-images.sh` (clones, patches, builds into the target Docker daemon) - see [GETTING_STARTED.md](GETTING_STARTED.md#building-openehrtool-v2) for the commands and the `OPENEHRTOOL_BACKEND_HOSTNAME` details.
 
-Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `create-secret.sh`).
+Required secret in `ohs-credentials`: `openehrtool-jwt-secret` (set in `.env` before running `scripts/create-secret.sh`).
 
-One required upstream patch is applied automatically by `build-images.sh`: `SECRET_KEY` in `backend-fastapi/app/config.py` is changed to read from `OPENEHRTOOL_SECRET_KEY` env var.
+One required upstream patch is applied automatically by `scripts/build-images.sh`: `SECRET_KEY` in `backend-fastapi/app/config.py` is changed to read from `OPENEHRTOOL_SECRET_KEY` env var.
 
 ## Cohort Explorer -- Deployment Notes
 
-No published Docker images. Build via `build-images.sh` - see [GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for the build commands and known build requirements.
+No published Docker images. Build via `scripts/build-images.sh` - see [GETTING_STARTED.md](GETTING_STARTED.md#building-and-enabling-cohort-explorer) for the build commands and known build requirements.
 
 **Prerequisites** (beyond the core stack):
 - **Keycloak** (required - the backend uses it for JWT auth and user management):

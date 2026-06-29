@@ -591,22 +591,22 @@ openehrtool-frontend:
 
 ### Building openEHRTool-v2 images
 
-No published Docker images exist upstream. Use `build-images.sh`:
+No published Docker images exist upstream. Use `scripts/build-images.sh`:
 
 ```bash
 # Standard (registry)
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-backend
+  bash scripts/build-images.sh --registry your-registry.example.org:5000 --component openehrtool-backend
 OPENEHRTOOL_BACKEND_HOSTNAME=openehrtool \
-  bash build-images.sh --registry your-registry.example.org:5000 --component openehrtool-frontend
+  bash scripts/build-images.sh --registry your-registry.example.org:5000 --component openehrtool-frontend
 
 # Local Docker Desktop (no registry - shares host daemon)
-bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
+bash scripts/build-images.sh --registry localhost:5000 --skip-push --component openehrtool-backend
 OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
+  bash scripts/build-images.sh --registry localhost:5000 --skip-push --component openehrtool-frontend
 ```
 
-Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_SECRET` in `.env` before running `create-secret.sh`).
+Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_SECRET` in `.env` before running `scripts/create-secret.sh`).
 
 ---
 

@@ -27,7 +27,7 @@ The catalogue below tracks the in-cluster components plus the external systems t
 | # | Constraint | Implementation |
 |---|-----------|----------------|
 | 1 | No upstream forks | Components run from official published images where they exist; no forked source trees are maintained |
-| 2 | Assume images may not exist | `build-images.sh` clones, applies minimal build-time patches, and builds/pushes images for components without published ones (openEHRTool-v2, EHRsuction, Cohort Explorer) |
+| 2 | Assume images may not exist | `scripts/build-images.sh` clones, applies minimal build-time patches, and builds/pushes images for components without published ones (openEHRTool-v2, EHRsuction, Cohort Explorer) |
 | 3 | Helm-only packaging | No custom controllers; CloudNativePG + MongoDB operators for state |
 | 4 | Single deploy command | Umbrella chart: `helm install ohs . -f values.yaml -n ohs` |
 | 5 | Components independently togglable | All templates wrapped in `if .Values.COMPONENT.enabled` |
