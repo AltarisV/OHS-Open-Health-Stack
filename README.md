@@ -16,7 +16,6 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **CloudNativePG**              | PostgreSQL operator                     | Active         | `1.21.0`                                                                            |
 | **MongoDB Community Operator** | MongoDB operator                        | Active         | `0.8.0`                                                                             |
 | **CSV-to-openEHR**             | Bulk import from CSV                    | Placeholder    |                                                                                     |
-| **BETTER Platform**            | External EHR at Charité                 | Reference only |                                                                                     |
 
 ## Architecture
 
