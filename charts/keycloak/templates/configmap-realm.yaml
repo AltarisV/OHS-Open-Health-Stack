@@ -60,7 +60,23 @@ data:
           "serviceAccountsEnabled": false,
           "redirectUris": ["*"],
           "webOrigins": ["*"],
-          "protocol": "openid-connect"
+          "protocol": "openid-connect",
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-realm-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "multivalued": "true",
+                "userinfo.token.claim": "true",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "groups",
+                "jsonType.label": "String"
+              }
+            }
+          ]
         }
       ],
       "users": [
@@ -92,7 +108,7 @@ data:
               "temporary": false
             }
           ],
-          "realmRoles": ["SUPER_ADMIN"]
+          "realmRoles": ["SUPER_ADMIN", "STUDY_COORDINATOR", "RESEARCHER", "CRITERIA_EDITOR", "STUDY_APPROVER"]
         }
         {{- end }}
       ]

@@ -73,6 +73,25 @@
   .cors-note code { background: rgba(0,0,0,.3); padding: 1px 5px; border-radius: 3px; font-family: monospace; }
 
   .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* Overview / data-flow map */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .flow-stage { display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; padding: 6px 0 6px 130px; }
+  .stage-label { width: 116px; flex-shrink: 0; display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .app-node { flex: 1; min-width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .app-node .app-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .app-node .app-role { font-size: 12px; color: var(--muted); line-height: 1.5; flex: 1; }
+  .app-node .app-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .app-node .tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; letter-spacing: .04em; }
+  .tag.ui { background: rgba(34,197,94,.15); color: var(--green); }
+  .tag.api { background: rgba(99,102,241,.18); color: #a5b4fc; }
+  .tag.db { background: rgba(245,158,11,.15); color: var(--yellow); }
+  a.mini-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all .15s; }
+  a.mini-btn.link { background: var(--accent); color: #fff; }
+  a.mini-btn.link:hover { background: #4f46e5; }
+  a.mini-btn.step { background: var(--border); color: var(--text); }
+  a.mini-btn.step:hover { background: #353850; }
 </style>
 </head>
 <body>
@@ -85,7 +104,8 @@
 <div class="layout">
 <nav>
   <div class="section-label">Setup</div>
-  <a onclick="show('config')" id="nav-config" class="active"><span class="step-num">⚙</span> Configuration</a>
+  <a onclick="show('overview')" id="nav-overview" class="active"><span class="step-num">☰</span> Overview</a>
+  <a onclick="show('config')" id="nav-config"><span class="step-num">⚙</span> Configuration</a>
 
   <div class="section-label">EHRbase</div>
   <a onclick="show('s1')" id="nav-s1"><span class="step-num">1</span> Create EHR</a>
@@ -105,8 +125,79 @@
 
 <main>
 
+<!-- OVERVIEW -->
+<div class="panel active" id="panel-overview">
+  <h2>Overview - Data Flow</h2>
+  <p class="desc">Where each application sits in the OHS process chain. Frontends open directly (adjust addresses under Configuration; run <code>scripts/port-forward.sh</code> first). "Test" jumps to the matching workflow step.</p>
+
+  <div class="flow">
+
+    <div class="flow-stage">
+      <div class="stage-label">Ingest</div>
+      <div class="app-node">
+        <div class="app-name">openEHRTool-v2 / external source <span class="tag ui">UI</span></div>
+        <div class="app-role">Data entry: creates EHRs and submits openEHR compositions via REST. This console's steps 1-3 play that role for the E2E test.</div>
+        <div class="app-links"><a class="mini-btn step" onclick="show('s1')">Test: Steps 1-3 →</a></div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp;REST: EHR / template / composition</div>
+
+    <div class="flow-stage">
+      <div class="stage-label">Storage</div>
+      <div class="app-node">
+        <div class="app-name">EHRbase <span class="tag api">API</span></div>
+        <div class="app-role">Central openEHR store (single source of truth). Persists EHRs, templates and compositions in PostgreSQL. All downstream components read from here.</div>
+        <div class="app-links">
+          <a class="mini-btn link" id="lnk-ehrbase" href="#" target="_blank" rel="noopener">Swagger UI ↗</a>
+          <a class="mini-btn step" onclick="show('s1')">Test: Step 1 →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp;reads compositions</div>
+
+    <div class="flow-stage">
+      <div class="stage-label">Transform</div>
+      <div class="app-node">
+        <div class="app-name">Eos <span class="tag api">API</span> <span class="tag db">→ OMOP CDM</span></div>
+        <div class="app-role">ETL openEHR → OMOP: maps subjects to <code>person</code> and compositions to <code>measurement</code> etc. in the <code>eos_omop</code> PostgreSQL database for OHDSI analytics.</div>
+        <div class="app-links"><a class="mini-btn step" onclick="show('s4')">Test: Step 4 →</a></div>
+      </div>
+      <div class="app-node">
+        <div class="app-name">openFHIR <span class="tag api">API</span> <span class="tag db">→ MongoDB</span></div>
+        <div class="app-role">FHIRConnect mapping engine (openEHR ⇄ FHIR R4). Bridges compositions to FHIR resources, cached in MongoDB.</div>
+        <div class="app-links"><a class="mini-btn step" onclick="show('s7')">Test: Extras →</a></div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓ &nbsp;AQL queries against EHRbase</div>
+
+    <div class="flow-stage">
+      <div class="stage-label">Analyze</div>
+      <div class="app-node">
+        <div class="app-name">Cohort Explorer <span class="tag ui">UI</span></div>
+        <div class="app-role">Researcher frontend (NUM num-portal): define and run AQL cohort queries against EHRbase. Login via Keycloak (testuser / test123 on a default install).</div>
+        <div class="app-links">
+          <a class="mini-btn link" id="lnk-cohort" href="#" target="_blank" rel="noopener">Open Cohort Explorer ↗</a>
+          <a class="mini-btn step" onclick="show('s6')">Test: Step 6 →</a>
+        </div>
+      </div>
+      <div class="app-node">
+        <div class="app-name">Keycloak <span class="tag ui">UI</span></div>
+        <div class="app-role">Identity and access management. Issues JWT tokens for Cohort Explorer (realm <code>crr</code>).</div>
+        <div class="app-links">
+          <a class="mini-btn link" id="lnk-keycloak" href="#" target="_blank" rel="noopener">Admin Console ↗</a>
+          <a class="mini-btn step" onclick="show('s5')">Test: Step 5 →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- CONFIG -->
-<div class="panel active" id="panel-config">
+<div class="panel" id="panel-config">
   <h2>Configuration</h2>
   <p class="desc">Set your port-forward addresses and credentials here. Values are stored in memory only and auto-filled into all steps below.</p>
 
@@ -123,9 +214,10 @@
         <div><label>EOS</label><input id="cfg-eos" value="http://localhost:8082"></div>
         <div><label>Keycloak</label><input id="cfg-kc" value="http://localhost:8083"></div>
       </div>
-      <div class="field-row">
+      <div class="field-row three">
         <div><label>Cohort Explorer Backend</label><input id="cfg-ceb" value="http://localhost:8084"></div>
-        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8085"></div>
+        <div><label>Cohort Explorer Frontend</label><input id="cfg-cef" value="http://localhost:8085"></div>
+        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8081"></div>
       </div>
     </div>
   </div>
@@ -330,7 +422,16 @@ function show(id) {
   document.getElementById('panel-' + id).classList.add('active');
   document.getElementById('nav-' + id)?.classList.add('active');
   propagateState();
+  if (id === 'overview') updateOverviewLinks();
 }
+
+// Direct links on the overview map, derived from the configured addresses.
+function updateOverviewLinks() {
+  document.getElementById('lnk-ehrbase').href  = cfg('cfg-ehrbase') + '/ehrbase/swagger-ui/index.html';
+  document.getElementById('lnk-cohort').href   = cfg('cfg-cef');
+  document.getElementById('lnk-keycloak').href = cfg('cfg-kc') + '/auth/admin/';
+}
+updateOverviewLinks();
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const cfg = k => document.getElementById(k).value.trim();

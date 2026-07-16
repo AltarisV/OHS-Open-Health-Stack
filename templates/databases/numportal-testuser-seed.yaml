@@ -27,6 +27,15 @@ spec:
         release: {{ .Release.Name }}
     spec:
       restartPolicy: OnFailure
+      # postgres:15-alpine is musl-based: with the default ndots:5, host search
+      # domains (e.g. a corporate DNS suffix) are tried before the literal name,
+      # and one SERVFAIL aborts musl's getaddrinfo - wget/psql then fail with
+      # "bad address" although the cluster FQDN resolves. ndots:1 resolves any
+      # dotted name absolutely first.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       containers:
         - name: seed
           image: postgres:15-alpine

@@ -29,7 +29,7 @@ fullnameOverride: ""
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8080  # nginx-unprivileged listens on 8080 (non-root)
+  targetPort: 80  # built image runs standard nginx listening on port 80
   annotations: {}
 
 ingress:
@@ -69,7 +69,7 @@ livenessProbe:
   enabled: true
   httpGet:
     path: /
-    port: 8080
+    port: 80
   initialDelaySeconds: 10
   periodSeconds: 20
   timeoutSeconds: 5
@@ -79,7 +79,7 @@ readinessProbe:
   enabled: true
   httpGet:
     path: /
-    port: 8080
+    port: 80
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5

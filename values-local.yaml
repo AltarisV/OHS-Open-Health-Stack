@@ -56,10 +56,12 @@ openfhir:
     limits:
       cpu: "1000m"
       memory: "2Gi"
-  # Probes hit openFHIR's GET /health endpoint (returns 200 "UP"); timings come from the
-  # subchart defaults (liveness initialDelay 30s, safe vs ~11s startup).
   livenessProbe:
     enabled: true
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
   readinessProbe:
     enabled: true
   config:
@@ -171,7 +173,9 @@ cohort-explorer-frontend:
     enabled: false
   config:
     api:
-      baseUrl: "http://localhost:8084/num-portal"
+      # Backend serves at root locally (the /num-portal prefix only exists behind
+      # the ingress); port-forward exposes it directly on 8084.
+      baseUrl: "http://localhost:8084"
     auth:
       baseUrl: "http://localhost:8083/auth"
       realm: "crr"
