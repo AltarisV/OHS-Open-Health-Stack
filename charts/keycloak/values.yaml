@@ -80,6 +80,15 @@ config:
   testUser:
     enabled: false
 
+  # Portal user "research" with all portal roles, as on the cloud deployment (enabled
+  # there in values-cloud.yaml). Password from the ohs-credentials key
+  # keycloak-research-password (scripts/create-secret.sh, KEYCLOAK_RESEARCH_PASSWORD);
+  # if it is missing or empty the user gets a random password that has to be reset in
+  # the admin console. Like the whole realm import, this only acts on an empty database.
+  researchUser:
+    enabled: false
+    email: "research@ohs.local"
+
 livenessProbe:
   enabled: true
   httpGet:

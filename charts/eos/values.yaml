@@ -87,9 +87,8 @@ config:
 # Health checks
 livenessProbe:
   enabled: true
-  httpGet:
-    path: /health
-    port: 8080
+  tcpSocket:
+    port: 8081  # eos listens on 8081; no plain HTTP /health at :8080
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -97,9 +96,8 @@ livenessProbe:
 
 readinessProbe:
   enabled: true
-  httpGet:
-    path: /health
-    port: 8080
+  tcpSocket:
+    port: 8081  # eos listens on 8081; no plain HTTP /health at :8080
   initialDelaySeconds: 20
   periodSeconds: 5
   timeoutSeconds: 3

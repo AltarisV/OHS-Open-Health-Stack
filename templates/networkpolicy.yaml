@@ -3,6 +3,7 @@
 {{- $ns := .Release.Namespace -}}
 {{- $nsLabel := .Values.networkPolicy.namespaceLabel | default $ns -}}
 {{- $ingressNs := .Values.networkPolicy.ingressControllerNamespace | default "ingress-nginx" -}}
+{{- $cnpgNs := .Values.networkPolicy.cnpgOperatorNamespace | default "cnpg-system" -}}
 ---
 # Deny all ingress by default. Egress is intentionally left open so pods can reach
 # the cluster DNS, operators, and (for the internal-cloud deployment) approved egress.
@@ -67,6 +68,43 @@ spec:
     - protocol: TCP
       port: {{ . }}
     {{- end }}
+
+---
+# Der CloudNativePG-Operator laeuft in einem eigenen Namespace und fragt den
+# Instance Manager jedes Datenbank-Pods auf Port 8000 nach dem Zustand
+# (/pg/status). Ohne diese Ausnahme verwirft default-deny diese Anfragen, und
+# zwar unauffaellig: der Operator meldet "Instance Status Extraction Error:
+# HTTP communication issue", die Datenbank selbst arbeitet unbeeindruckt
+# weiter, und der Ausfall faellt erst auf, wenn eine Aenderung nicht mehr
+# angewandt wird. Genau so blieb am 2026-09-05 ein Rollout wirkungslos:
+# shared_buffers stand im Cluster-Objekt, der Pod lief unveraendert weiter,
+# und nichts meldete einen Fehler (M-63).
+#
+# kubernetes.io/metadata.name setzt Kubernetes selbst auf jedem Namespace -
+# anders als die Regeln oben braucht diese also keine Beschriftung von Hand.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow-cnpg-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $cnpgNs }}
+    ports:
+    - protocol: TCP
+      port: 8000   # Instance Manager: Zustand, Sicherungen, Neustart
+    - protocol: TCP
+      port: 9187   # Metriken
 
 {{- end }}
 {{- end }}

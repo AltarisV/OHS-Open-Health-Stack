@@ -21,14 +21,16 @@ global:
 # Database Operators
 cloudnative-pg:
   enabled: true
-  version: "1.21.0"  # PIN_VERSION
+  # Informational only: the operators are installed outside this chart
+  # (docs/GETTING_STARTED.md). Versions as tested.
+  version: "0.29.0"  # PIN_VERSION: Helm chart cnpg/cloudnative-pg (operator 1.30.0)
   cnpg:
     crds:
       create: true
 
 mongodb-operator:
   enabled: true
-  version: "0.8.0"  # PIN_VERSION
+  version: "0.13.0"  # PIN_VERSION: Helm chart mongodb/community-operator (informational)
 
 # PostgreSQL Clusters (for EHRbase and Eos)
 postgres:
@@ -36,16 +38,111 @@ postgres:
   # EHRbase database cluster
   ehrbase:
     enabled: true
-    storage: "10Gi"  # CHANGE_ME: adjust for your environment
-    instances: 3  # High-availability setup (production minimum)
-    walStorage: "5Gi"
+    # Sized from a measured migration, not a guess: 4.7M openEHR compositions
+    # from the SAP IS-H/i.s.h.med dataset occupy 298 GB (measured 2026-08-24 on
+    # the reference instance, pg_database_size). ~64 KB per composition - the
+    # canonical JSON plus the raw source row kept in feeder_audit dominate.
+    # 400Gi leaves headroom for VACUUM, reindex and temp files.
+    #
+    # The previous value was the template default (10Gi, CHANGE_ME). It filled
+    # up 208k compositions into the load, PostgreSQL PANICked on a checkpoint
+    # it could not write, and every service on this cluster went down with it -
+    # keycloak, numportal and eos_omop share the instance.
+    # 400Gi data + 50Gi WAL, but in ONE volume - see walStorage below.
+    storage: "450Gi"
+    # Empty on purpose: pg_wal lives inside the data volume. This project's
+    # Cinder quota caps the *number* of volumes at 20, and all 20 are in use;
+    # a separate WAL volume would double what this cluster needs and could not
+    # be provisioned at all (ProvisioningFailed, VolumeLimitExceeded, 2026-08-24).
+    # Set this to e.g. "50Gi" once volume count is no longer the constraint.
+    walStorage: ""
+    # One instance, not three. Three would need six PVCs (data + WAL each) and
+    # the project's Cinder *volume count* quota is 20 with 19 in use - instances
+    # 2 and 3 were never created, the operator kept retrying unnoticed. Raising
+    # this needs more volume count, not more storage.
+    instances: 1
     backupRetention: "30d"
     primaryUpdateStrategy: "unsupervised"  # Options: unsupervised, rollingUpdate
+
+    # Am 26.08.2026 wurde dieser Pod fuenfmal OOMKilled (Exit 137), zuletzt
+    # mitten im Datenabruf des Cohort Explorers. Das Limit stand auf 1 GiB -
+    # fuer eine Datenbank mit 4,79 Mio. Compositions, die zugleich EHRbase,
+    # num-portal, Keycloak und Eos bedient. Weil es eine Einzelinstanz ist,
+    # reisst jeder Neustart alles mit: EHRbase antwortet mit 500, num-portal
+    # verliert schlagartig jede Verbindung, und im Portal steht nur "Die Daten
+    # konnten nicht geladen werden".
+    #
+    # Die Nodes haben je rund 15,6 GiB und sind zu einem Viertel belegt.
+    #
+    # Am 2026-09-05 gemessen: dieselbe Zaehlung ueber alle 4,79 Mio.
+    # Compositions braucht 31,2 s im ersten und 0,67 s in jedem weiteren Lauf
+    # (M-63). Der Faktor 46 ist der Buffer-Cache - bei 298 GB Bestand und 2 GB
+    # shared_buffers liest die Instanz fast jede neue Abfrage von der Platte.
+    # Die Nodes haben je rund 15,6 GiB und sind zu einem Viertel belegt, das
+    # Limit war also nicht die Grenze, sondern eine Vorsichtsmassnahme aus der
+    # OOM-Woche. 12 GiB lassen shared_buffers verdreifachen und behalten rund
+    # 4 GiB Abstand fuer work_mem, Verbindungen und Wartungsvorgaenge.
+    #
+    # Der Request muss mindestens so gross sein wie shared_buffers - CNPG
+    # prueft das im Admission-Webhook und lehnt sonst ab ("Memory request is
+    # lower than PostgreSQL `shared_buffers` value"). Der Request ist damit
+    # keine Schaetzung mehr, sondern eine Ableitung: shared_buffers plus Luft
+    # fuer Verbindungen, work_mem und Wartungsvorgaenge.
+    resources:
+      requests:
+        memory: "5Gi"
+        cpu: "500m"
+      limits:
+        memory: "12Gi"
+        cpu: "2000m"
+
+    # Abgestimmt auf das Limit oben. shared_buffers = 25 % des Containers,
+    # effective_cache_size als Schaetzung dessen, was Container plus Seitencache
+    # halten koennen. work_mem gilt PRO Sortier- und Hash-Schritt und
+    # Verbindung, nicht pro Abfrage - bei max_connections 200 verbietet sich ein
+    # grosszuegiger Wert von selbst, sonst ist der naechste OOM nur eine Frage
+    # der Gleichzeitigkeit. Aenderungen an shared_buffers erfordern einen
+    # Neustart der Instanz, den CNPG selbst durchfuehrt.
+    parameters:
+      max_connections: "200"
+      shared_buffers: "4GB"
+      effective_cache_size: "9GB"
+      maintenance_work_mem: "512MB"
+      # Bleibt bei 16 MB. work_mem gilt pro Sortier- und Hash-Schritt und pro
+      # Verbindung; es mit dem Limit mitwachsen zu lassen holt den OOM vom
+      # 26.08. zurueck, sobald mehrere Abfragen zusammentreffen.
+      work_mem: "16MB"
+      # 2 -> 4. Die teuren Abfragen sind Scans ueber Millionen Zeilen, und die
+      # gewinnen linear an Arbeitern. Der Preis ist ein Vielfaches von work_mem
+      # je Abfrage, was das erhoehte Speicherlimit oben traegt.
+      max_parallel_workers_per_gather: "4"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+
+    # Messen statt vermuten: pg_stat_statements sammelt Laufzeit und
+    # Puffertreffer je erzeugtem SQL. Ohne das ist nicht feststellbar, welche
+    # der vom Cohort Explorer gestellten AQL-Abfragen wirklich teuer ist - eine
+    # Zaehlung von Hand misst nicht dasselbe wie die Abfragen im Betrieb.
+    #
+    # ACHTUNG: Aendern erzwingt einen Neustart der Instanz, und die ist eine
+    # Einzelinstanz fuer EHRbase, num-portal, Keycloak und Eos zugleich. Der
+    # Neustart reisst alle vier mit. Zusammen mit shared_buffers oben also in
+    # EINEM Fenster ausrollen, nicht nacheinander.
+    #
+    # Nach dem Neustart einmalig in der Datenbank ehrbase:
+    #   CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+    sharedPreloadLibraries: []   # zum Aktivieren: ["pg_stat_statements"]
   
   # Eos (OMOP Bridge) database cluster - can share with EHRbase or be separate
   eos:
     enabled: true
     sharedCluster: true  # true = use same cluster as EHRbase, false = create separate cluster
+    # NOTE: while sharedCluster is true, the four settings below have NO effect -
+    # the shared cluster is sized entirely by postgres.ehrbase.*. Kept here so
+    # they are ready if eos is ever split into its own cluster.
     storage: "50Gi"  # CHANGE_ME: OMOP CDM requires more space; PIN_VERSION for production
     walStorage: "5Gi"
     instances: 2
@@ -106,14 +203,18 @@ ehrbase:
     enabled: true
     path: "/ehrbase"
     pathType: "Prefix"
-  
+
+  # Sized for a repository in the millions of compositions. Der Heap bleibt
+  # bewusst 2 GiB unter dem Container-Limit: die JVM braucht diesen Abstand fuer
+  # Metaspace, Code-Cache und direkte Puffer, und ein OOM-gekillter Container
+  # reisst jede laufende Anfrage mit, nicht nur die verursachende.
   resources:
     requests:
       cpu: "500m"
-      memory: "1Gi"
+      memory: "2Gi"
     limits:
       cpu: "2000m"
-      memory: "4Gi"
+      memory: "6Gi"
 
   # Application config. These keys MUST live under `config:` - that is the schema the
   # ehrbase subchart reads (.Values.config.*). Keys placed directly under `ehrbase:` are ignored.
@@ -126,6 +227,36 @@ ehrbase:
       username: "ehrbase_user"
       type: "BASIC"  # Options: BASIC, OAUTH2
 
+    # JVM-Heap. Muss zu resources.limits.memory passen (2 GiB Abstand).
+    jvm:
+      maxHeapSize: "4g"
+      minHeapSize: "1g"
+
+    # Schutz vor unbegrenzten AQL-Abfragen. Am 26.08.2026 hat die Startseite von
+    # openEHRTool eine Abfrage ohne LIMIT ueber ~2 Mio. Compositions gestellt;
+    # EHRbase quittierte das mit OutOfMemoryError - der trifft den gesamten
+    # Dienst, also auch den Cohort Explorer.
+    #
+    # ACHTUNG: defaultLimit kuerzt STILL, ohne Fehler und ohne Hinweis in der
+    # Antwort. Die Untergrenze fuer einen brauchbaren Wert ist deshalb die
+    # Patientenzahl: eine Kohortenabfrage mit SELECT DISTINCT e/ehr_id/value
+    # liefert hoechstens eine Zeile je Patient, und davon gibt es (Messung
+    # 26.08.2026) 104.840. Ein Limit darunter wuerde Kohorten unbemerkt
+    # abschneiden. 200.000 laesst Luft fuer Wachstum und bleibt fuer
+    # ID-Ergebnisse winzig - EHR-IDs sind ein paar Dutzend Byte pro Zeile.
+    #
+    # Gemessene Compositions je Template (26.08.2026, gesamt ~4,79 Mio.):
+    #   KDS_Laborbericht 2.040.085 | Vitalparameter 1.253.772
+    #   Patientenaufenthalt_ISH 945.056 | KDS_Fall_ISH 147.156
+    #   KDS_Diagnose_ISH 147.154 | KDS_Prozedur_ISH 130.347
+    #   KDS_Person_Pseudonymisiert 104.840 | KDS_Medikationseintrag_ISH 25.108
+    #   Allergieliste_ISH 686
+    aql:
+      defaultLimit: "200000"
+      maxLimit: ""
+      maxFetch: ""
+      fetchPrecedence: ""
+
     # Database connection - CloudNativePG read-write service in this namespace.
     # Credentials are injected via the postgres-cluster-app secret
     # (set EHRBASE_DB_PASSWORD in .env, applied by create-secret.sh).
@@ -135,20 +266,10 @@ ehrbase:
       name: "ehrbase"
       username: "ehrbase"
 
-  # Probes
-  livenessProbe:
-    httpGet:
-      path: "/health"
-      port: 8080
-    initialDelaySeconds: 30
-    periodSeconds: 10
-  
-  readinessProbe:
-    httpGet:
-      path: "/health"
-      port: 8080
-    initialDelaySeconds: 20
-    periodSeconds: 5
+  # Probes: intentionally none here. They come from charts/ehrbase/values.yaml -
+  # liveness tcpSocket, readiness httpGet on /ehrbase/management/health/readiness
+  # including the database (M-63). A handler set here is merged with the subchart's
+  # into a probe with two handlers, which the API server rejects.
 
 # openFHIR - FHIR server & EHR-FHIR mapping (published Docker image: openfhir/openfhir)
 openfhir:
@@ -260,9 +381,8 @@ eos:
       mappingFilesPath: "/app/mappings"  # ConfigMap-mounted path read by Eos
 
   livenessProbe:
-    httpGet:
-      path: "/health"
-      port: 8080
+    tcpSocket:
+      port: 8081  # eos listens on 8081, not 8080
     initialDelaySeconds: 30
     periodSeconds: 10
 
@@ -280,10 +400,15 @@ ehrsuction:
   suspend: true           # set false to enable scheduled runs
   backoffLimit: 1
   config:
-    baseUrl: "http://ohs-ehrbase:8080/ehrbase"  # CHANGE_ME: update service name/namespace if different
+    # Server root WITHOUT /ehrbase: EHRsuction appends /ehrbase/rest/openehr/v1 itself.
+    # With /ehrbase here every request went to /ehrbase/ehrbase/... and got a 404.
+    baseUrl: "http://ohs-ehrbase:8080"  # CHANGE_ME: update service name/namespace if different
     platform: "EHRBASE"
     exportType: "CANONICAL"
     steps: 5000
+    # Export only compositions of this template (empty = all, the upstream behaviour).
+    # A full export of a large repository does not fit a small export volume.
+    templateId: ""
     logging:
       cmdLevel: "info"
       fileLevel: "debug"
@@ -346,6 +471,11 @@ cohort-explorer-backend:
       schema: "num"
       username: "numportal"
       password: "CHANGE_ME"  # overridden by ohs-credentials secret
+      # Ein Datenabruf haelt seine Verbindung ueber die gesamte Laufzeit. Bei
+      # Hikaris Vorgabe von zehn genuegen wenige gleichzeitige Abrufe, um das
+      # ganze Portal lahmzulegen - auch Navigation und Kacheln scheitern dann.
+      # Postgres steht auf max_connections 200, 30 sind davon unkritisch.
+      maxPoolSize: 30
 
     keycloak:
       url: "http://ohs-keycloak.ohs.svc.cluster.local:8080/auth"
@@ -367,6 +497,10 @@ cohort-explorer-backend:
     privacy:
       minHits: 30
       pseudonymitySecret: "CHANGE_ME"  # overridden by ohs-credentials secret
+      # Pseudonyme lokal bilden statt bei einer Treuhandstelle anzufragen.
+      # Ohne das schlaegt jeder Datenabruf fehl, und zwar lautlos: die leere
+      # Tabelle in der Oberflaeche ist eine verschluckte ResourceNotFound.
+      localPseudonyms: true
 
     mail:
       enabled: false
@@ -403,7 +537,7 @@ cohort-explorer-frontend:
   service:
     type: "ClusterIP"
     port: 80
-    targetPort: 80  # built image runs standard nginx listening on port 80
+    targetPort: 8080  # built image runs nginx-unprivileged (build-images.sh) listening on 8080
 
   ingress:
     enabled: true
@@ -553,20 +687,28 @@ openehrtool-backend:
     port: 5000
     targetPort: 5000
   ingress:
-    enabled: true
+    # Off by default: with a Gateway API setup the route (prefix /openehrtool-api)
+    # lives outside the chart. Set to true only on a
+    # cluster that actually runs an Ingress controller.
+    enabled: false
     className: ""
     annotations: {}
     # Must match VITE_BACKEND_HOSTNAME used when building the frontend image
     host: "openehrtool"
     path: /
     pathType: "Prefix"
+  # Die Startseite aggregiert die AQL-Ergebnisse in Python, Zeile fuer Zeile -
+  # bei einem Ergebnislimit von 200.000 ist das die teuerste Arbeit im ganzen
+  # Stack, und sie laeuft einkernig. Mit 500m brauchte sie laenger als die
+  # 60 Sekunden, nach denen die Oberflaeche neu anfragt: jede Wiederholung legte
+  # dieselbe Rechnung obendrauf, sodass nie ein Ergebnis fertig wurde.
   resources:
     requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "500m"
+      cpu: "250m"
       memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
   config:
     ehrbaseNodename: "local.ehrbase.org"  # display label; actual URL entered by users at login
     redis:
@@ -587,9 +729,11 @@ openehrtool-frontend:
   service:
     type: "ClusterIP"
     port: 80
-    targetPort: 80  # built image runs standard nginx listening on port 80
+    targetPort: 8080  # built image runs nginx-unprivileged (build-images.sh) listening on 8080
   ingress:
-    enabled: true
+    # Off on the cloud cluster - see the note on openehrtool-backend.ingress.
+    # Served at https://<host>/openehrtool/ via the Gateway API.
+    enabled: false
     className: ""
     annotations: {}
     host: "openehrtool"
@@ -666,6 +810,11 @@ networkPolicy:
   namespaceLabel: ""
   # Namespace label of your ingress controller (default assumes ingress-nginx).
   ingressControllerNamespace: "ingress-nginx"  # CHANGE_ME if different
+  # Namespace des CloudNativePG-Operators. Er sitzt ausserhalb von ohs und faellt
+  # damit unter default-deny; ohne die Regel allow-cnpg-operator kann er den
+  # Zustand der Datenbank-Pods nicht auslesen und wendet dann keine Aenderungen
+  # mehr an - ohne dass irgendetwas einen Fehler meldet.
+  cnpgOperatorNamespace: "cnpg-system"
   # HTTP ports the ingress controller is allowed to reach on app pods.
   httpPorts:
     - 8080  # ehrbase / openfhir / keycloak

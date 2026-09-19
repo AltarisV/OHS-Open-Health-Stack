@@ -69,6 +69,10 @@ spec:
             secretKeyRef:
               name: postgres-numportal-user-secret
               key: password
+        # Groesse des Verbindungspools. Wirkt nur mit dem in build-images.sh
+        # aufgetragenen Patch; ohne ihn bleibt es bei Hikaris Vorgabe von zehn.
+        - name: SPRING_DATASOURCE_NUMPORTAL_MAXIMUM_POOL_SIZE
+          value: {{ .Values.config.database.maxPoolSize | default 30 | quote }}
 
         # ── Keycloak / OAuth2 ──────────────────────────────────────────────
         - name: KEYCLOAK_URL
@@ -123,6 +127,20 @@ spec:
             secretKeyRef:
               name: ohs-credentials
               key: numportal-pseudonymity-secret
+        # Ohne Treuhandstelle schlaegt JEDER Datenabruf fehl: num-portal ersetzt
+        # nach der AQL die Patienten-IDs durch Pseudonyme und holt sie per HTTP
+        # beim FTTP. Ist der nicht erreichbar, wirft Pseudonymity eine
+        # ResourceNotFound, retrieveTemplateData verschluckt sie, und die
+        # Oberflaeche zeigt eine leere Tabelle ohne Fehlermeldung.
+        # Der Schalter laesst num-portal die Pseudonyme selbst bilden:
+        # SHA3-256(id + projectId + privacy.pseudonymitySecret), deterministisch
+        # und projektbezogen. Ueber SPRING_APPLICATION_JSON gesetzt, weil der
+        # Eigenschaftsname Grossbuchstaben enthaelt und die Umsetzung auf eine
+        # Umgebungsvariable davon abhinge, wie er im Code gelesen wird.
+        {{- if .Values.config.privacy.localPseudonyms }}
+        - name: SPRING_APPLICATION_JSON
+          value: '{"pseudonymity":{"fake3rdPartyPseudonymEnabled":true}}'
+        {{- end }}
 
         # ── Feature flags ──────────────────────────────────────────────────
         - name: FEATURE_SEARCH_BY_MANAGER

@@ -59,22 +59,91 @@ config:
     name: ehrbase
     username: ehrbase
     password: CHANGE_ME_DATABASE_PASSWORD  # Inject via Secret
+    # Verbindungspool. Spring Boots Vorgaben sind maxLifetime 30 min und
+    # keepaliveTime AUS - der Pool prueft leerlaufende Verbindungen also nie.
+    # Wird eine davon vom Cluster-Netz stillgelegt, faellt das erst beim
+    # Benutzen auf, und der Pod bleibt danach dauerhaft gestoert (M-63).
+    # Leerer String = Vorgabe von HikariCP beibehalten.
+    pool:
+      keepaliveTime: "120000"    # alle 2 min eine Pruefabfrage je Leerlaufverbindung
+      maxLifetime: "900000"      # 15 min, kuerzer als jede Leerlaufgrenze davor
+      maximumPoolSize: ""        # leer = 10
   
-  # Java/Spring Boot configuration
+  # Java/Spring Boot configuration.
+  # Keep maxHeapSize well below resources.limits.memory - the JVM needs roughly
+  # 1-1.5 GiB on top of the heap for metaspace, code cache and direct buffers.
   jvm:
     maxHeapSize: "2g"
     minHeapSize: "512m"
+
+  # AQL result limits (EHRbase 2.x). Empty string = leave unset = EHRbase's
+  # unlimited default. See docs.ehrbase.org > Explore > AQL > Configuration.
+  aql:
+    # Applies when a query has neither a LIMIT clause nor a fetch parameter.
+    # This is the guard rail against unbounded queries; note that it TRUNCATES
+    # silently rather than erroring, so set it above any legitimate result size.
+    defaultLimit: ""
+    # Hard ceiling for an explicit LIMIT clause - exceeding it is an error.
+    maxLimit: ""
+    # Hard ceiling for the fetch query parameter - exceeding it is an error.
+    maxFetch: ""
+    # REJECT (EHRbase default) or MIN_FETCH, when LIMIT and fetch are both given.
+    fetchPrecedence: ""
+    # AQL debug headers (EHRbase-AQL-Dry-Run, -Executed-SQL, -Query-Plan). While on,
+    # any authenticated caller can read generated SQL and query plans - switch on
+    # only for an analysis (scripts/aql-explain.sh), then off again.
+    debuggingEnabled: false
   
+  # Management-Endpunkte, nur so weit geoeffnet wie der Readiness-Probe
+  # braucht. exposure.include steht in EHRbase ab Werk auf
+  # 'env, health, info, metrics, prometheus', die einzelnen Endpunkte sind aber
+  # auf access: none gesetzt - erst healthAccess macht health erreichbar, die
+  # uebrigen bleiben zu. webAccess: PUBLIC gilt damit nur fuer health.
+  # Leerer String / false = EHRbase-Vorgabe beibehalten (alles zu).
+  management:
+    healthAccess: "read-only"          # none | read-only | unrestricted
+    webAccess: "PUBLIC"                # ADMIN_ONLY | PRIVATE | PUBLIC
+    probesEnabled: true                # /management/health/{readiness,liveness}
+    readinessInclude: "readinessState,db"
+
   # Logging
   logging:
     level: INFO  # Options: DEBUG, INFO, WARN, ERROR
     format: json  # Options: json, text
 
-# Health checks
+# Gesundheitspruefungen. Liveness und Readiness pruefen bewusst
+# Verschiedenes - das ist der Kern dieser Konfiguration, keine Nachlaessigkeit.
+#
+# LIVENESS bleibt tcpSocket. Ein Liveness-Probe toetet den Container. Haenge er
+# an der Datenbank, wuerde ein Ausfall der geteilten PostgreSQL-Instanz beide
+# Replikate in eine Neustartschleife schicken und aus einer Stoerung einen
+# Ausfall machen - fuer ein Problem, das die Pods nicht verursacht haben.
+#
+# READINESS ist httpGet auf die Readiness-Gruppe. Der frueher hier stehende
+# tcpSocket-Probe bestaetigte lediglich, dass Tomcat den Port annimmt. Am
+# 2026-09-05 lief ein Replikat neun Tage mit "1/1 Running", obwohl sein
+# Verbindungspool zerstoert war; rund jede zweite Anfrage an EHRbase hing
+# danach 300 s, bis das Gateway abbrach (M-63). Ein Probe, der die Datenbank
+# nicht anfasst, kann das grundsaetzlich nicht bemerken.
+#
+# Drei Bedingungen muessen dafuer zusammenkommen, sonst ist der httpGet nur
+# aufwendiger und genauso blind:
+#  1. Der Pfad traegt den Kontextpfad /ehrbase. Ein blosses /management/health
+#     ist 404, und darauf wuerde der Probe zu Recht Alarm schlagen.
+#  2. config.management oeffnet die Endpunkte ueberhaupt erst - EHRbase liefert
+#     sie abgeschaltet und ADMIN_ONLY aus.
+#  3. config.management.readinessInclude enthaelt "db". Spring Boots
+#     Readiness-Gruppe besteht ab Werk nur aus readinessState.
+#
+# Beim Aendern gilt weiterhin: Helm verschmilzt Wertekarten, ein Elternchart,
+# das tcpSocket auf ein httpGet legt, erzeugt einen Probe mit ZWEI Handlern,
+# den der API-Server mit "may not specify more than 1 handler type" ablehnt -
+# das Upgrade bleibt halb angewandt liegen. Das Elternchart setzt fuer EHRbase
+# derzeit keine Probes; wer dort welche ergaenzt, aendert beide Dateien im
+# selben Commit.
 livenessProbe:
   enabled: true
-  httpGet:
-    path: /health
+  tcpSocket:
     port: 8080
   initialDelaySeconds: 30
   periodSeconds: 10
@@ -84,11 +153,13 @@ livenessProbe:
 readinessProbe:
   enabled: true
   httpGet:
-    path: /health
+    path: /ehrbase/management/health/readiness
     port: 8080
   initialDelaySeconds: 20
-  periodSeconds: 5
-  timeoutSeconds: 3
+  periodSeconds: 10
+  # Grosszuegig: der Probe fasst die Datenbank an, und die bedient noch vier
+  # weitere Dienste. Zu knapp bemessen nimmt er unter Last gesunde Pods heraus.
+  timeoutSeconds: 5
   failureThreshold: 3
 
 # Pod configuration

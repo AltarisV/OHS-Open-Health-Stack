@@ -1,10 +1,17 @@
 {{- if .Values.config.realmImport.enabled }}
+{{- $host := .Values.config.hostname | default "localhost" }}
 # ConfigMap holding the crr realm definition for automatic import on first startup.
 # Keycloak reads files from /opt/keycloak/data/import/ when started with --import-realm.
 # If the realm already exists (e.g. after a helm upgrade), Keycloak skips the import - it is idempotent.
 #
-# The string __NUM_PORTAL_CLIENT_SECRET__ is a placeholder replaced at pod start time
-# by a busybox initContainer using the value from ohs-credentials/numportal-keycloak-secret.
+# Placeholders, replaced at pod start by the realm-config initContainer (deployment.yaml):
+#   __NUM_PORTAL_CLIENT_SECRET__  <- ohs-credentials/numportal-keycloak-secret
+#   __RESEARCH_USER_PASSWORD__    <- ohs-credentials/keycloak-research-password
+#                                    (optional; a random password if missing or empty)
+#
+# Redirect URIs of num-portal-webapp follow config.hostname: "*" for localhost (local
+# development), otherwise the external host plus http://localhost - the values the cloud
+# deployment was given by hand in the admin console before they were kept here.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -58,8 +65,13 @@ data:
           "implicitFlowEnabled": false,
           "directAccessGrantsEnabled": true,
           "serviceAccountsEnabled": false,
+          {{- if eq $host "localhost" }}
           "redirectUris": ["*"],
           "webOrigins": ["*"],
+          {{- else }}
+          "redirectUris": ["https://{{ $host }}/*", "http://localhost/*"],
+          "webOrigins": ["https://{{ $host }}", "http://localhost"],
+          {{- end }}
           "protocol": "openid-connect",
           "protocolMappers": [
             {
@@ -109,6 +121,24 @@ data:
             }
           ],
           "realmRoles": ["SUPER_ADMIN", "STUDY_COORDINATOR", "RESEARCHER", "CRITERIA_EDITOR", "STUDY_APPROVER"]
+        }
+        {{- end }}
+        {{- if .Values.config.researchUser.enabled }},
+        {
+          "username": "research",
+          "enabled": true,
+          "emailVerified": true,
+          "email": {{ .Values.config.researchUser.email | quote }},
+          "firstName": "Research",
+          "lastName": "User",
+          "credentials": [
+            {
+              "type": "password",
+              "value": "__RESEARCH_USER_PASSWORD__",
+              "temporary": false
+            }
+          ],
+          "realmRoles": ["SUPER_ADMIN", "ORGANIZATION_ADMIN", "STUDY_COORDINATOR", "STUDY_APPROVER", "RESEARCHER", "CRITERIA_EDITOR", "CONTENT_ADMIN"]
         }
         {{- end }}
       ]

@@ -400,10 +400,15 @@ KC_TOKEN=$(curl -s -X POST \
 echo "Token obtained: ${KC_TOKEN:0:40}..."
 
 curl -s -H "Authorization: Bearer $KC_TOKEN" \
-  http://localhost:8084/num-portal/api/v1/cohort | jq .
+  http://localhost:8084/aql/all | jq .
 ```
 
-Expected: HTTP 200 with a JSON array (empty `[]` on a fresh install).
+Expected: HTTP 200 with a JSON array (empty `[]` before any AQL criteria are created).
+
+Note the paths: the backend serves its controllers directly under `/` (`/aql`, `/cohort`, `/project`),
+so a port-forward needs no prefix. The `/num-portal` prefix exists only on the gateway and is
+rewritten to `/` by the HTTPRoute. The AQL criteria that the cohort builder needs can be created
+with `scripts/seed-aql-criteria.sh` (catalogue in `scripts/aql-criteria.json`, see `--help`).
 
 **Open the UI in the browser:**
 

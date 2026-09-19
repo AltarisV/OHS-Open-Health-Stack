@@ -299,26 +299,78 @@ ehrbase:
                                     # CHANGE_ME: inject via Secret
   
   livenessProbe:
-    httpGet:
-      path: string                  # Health check endpoint
-                                    # Default: "/health"
-      port: integer                 # Port for health check
+    tcpSocket:                      # TCP, not httpGet - EHRbase serves under
+      port: integer                 # /ehrbase, so /health returns 404
                                     # Default: 8080
-    
+
     initialDelaySeconds: integer    # Wait before first probe
                                     # Default: 30 seconds
-    
+
     periodSeconds: integer          # Probe interval
                                     # Default: 10 seconds
-  
+
   readinessProbe:
-    httpGet:
-      path: string                  # Readiness endpoint
+    tcpSocket:
       port: integer
-    
+
     initialDelaySeconds: integer    # Default: 20
     periodSeconds: integer          # Default: 5
 ```
+
+> **Do not mix probe handler types across values files.** The probe is rendered into the manifest
+> verbatim, and Helm *merges* values maps instead of replacing them. A `tcpSocket` in one file on top
+> of an `httpGet` in another yields a probe with both handlers, which the API server rejects with
+> `may not specify more than 1 handler type` — mid-upgrade, leaving the release half-applied. Chart
+> default and parent `values.yaml` therefore both use `tcpSocket`. The `httpGet: null` line that
+> exists in the cloud deployment's `values-cloud.yaml` was the workaround for this and is now
+> redundant.
+
+### AQL result limits (`ehrbase.config.aql`)
+
+EHRbase sets **no** result limit by default. An AQL query without a `LIMIT` clause streams every
+matching row into the JVM heap — on a repository with millions of compositions that ends in
+`OutOfMemoryError`, and that kills in-flight requests of *every* client, not just the caller.
+Observed on 2026-08-26: the openEHRTool dashboard issued such a query over ~2 million compositions
+and EHRbase answered with HTTP 500 after running out of heap.
+
+```yaml
+ehrbase:
+  config:
+    aql:
+      defaultLimit: "100000"    # EHRBASE_REST_AQL_DEFAULTLIMIT
+      maxLimit: ""              # EHRBASE_REST_AQL_MAXLIMIT
+      maxFetch: ""              # EHRBASE_REST_AQL_MAXFETCH
+      fetchPrecedence: ""       # EHRBASE_REST_AQL_FETCHPRECEDENCE: REJECT | MIN_FETCH
+```
+
+| Key | Applies when | On violation |
+| --- | --- | --- |
+| `defaultLimit` | Query has neither `LIMIT` nor `fetch` | **Truncates silently** |
+| `maxLimit` | Query has an explicit `LIMIT` | Error |
+| `maxFetch` | Request has a `fetch` parameter | Error |
+| `fetchPrecedence` | Both `LIMIT` and `fetch` present | `REJECT` (default) or `MIN_FETCH` |
+
+`defaultLimit` is the only one that guards against unbounded queries, and it is also the only one
+that changes results without saying so — no error, no marker in the response. Set it above any
+legitimate result size, in particular above the largest expected Cohort Explorer data export, and
+verify a real export before lowering it. An empty string leaves the property unset.
+
+**It is a default, not a ceiling.** Measured on 2026-08-26 with `defaultLimit: "200000"`:
+
+| Query | Rows |
+| --- | ---: |
+| `SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c` | 200.000 (capped) |
+| the same with `LIMIT 250000` | 250.000 |
+| `SELECT COUNT(*) FROM EHR e CONTAINS COMPOSITION c` | 4.794.204 (real total) |
+
+Any client that states an explicit `LIMIT`, or pages with `offset`/`fetch`, retrieves everything —
+`maxLimit` and `maxFetch` are deliberately unset. Aggregates return a single row and are never
+truncated. The cap only ever hits a client that asks for everything without saying so.
+
+Cohort queries are safe by construction: `SELECT DISTINCT e/ehr_id/value` cannot return more rows
+than there are patients (104.841 on this deployment), which is below the limit.
+
+Reference: [EHRbase docs — AQL Configuration](https://docs.ehrbase.org/docs/EHRbase/Explore/AQL/Configuration)
 
 ### Example: Production EHRbase Configuration
 
@@ -335,7 +387,13 @@ ehrbase:
       memory: "2Gi"
     limits:
       cpu: "2000m"
-      memory: "4Gi"
+      memory: "6Gi"
+  config:
+    jvm:
+      maxHeapSize: "4g"   # keep ~2 GiB below limits.memory
+      minHeapSize: "1g"
+    aql:
+      defaultLimit: "100000"
   auth:
     username: "ehrbase_admin"
     password: "CHANGE_ME_STRONG_PASSWORD"  # Inject via Secret!
@@ -626,7 +684,7 @@ csv-to-openehr:
 better-platform:
   enabled: false                    # BETTER Platform - External reference
   externalEndpoint: string          # External BETTER endpoint
-                                    # Default: "https://better.charité.example.org"
+                                    # Default: "https://better.example.org"
                                     # CHANGE_ME: update to actual endpoint
                                     # Not deployed by Helm (external system)
 ```

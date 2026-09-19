@@ -1,0 +1,60 @@
+# Cloud overlay (example): self-built images from your own registry.
+# Replace registry.example.org with the registry your cluster pulls from.
+ehrsuction:
+  enabled: true
+  image:
+    repository: "registry.example.org/ehrsuction"
+    tag: "ohs"
+    pullPolicy: Always
+  # Daily export (03:00) restricted to one template; a full export of a large
+  # EHRbase may not fit on the export volume.
+  suspend: false
+  config:
+    templateId: "Allergieliste_ISH"
+
+cohort-explorer-backend:
+  image:
+    repository: "registry.example.org/cohort-explorer-backend"
+    tag: "ohs"
+    pullPolicy: Always
+
+cohort-explorer-frontend:
+  image:
+    repository: "registry.example.org/cohort-explorer-frontend"
+    tag: "ohs"
+    pullPolicy: Always
+
+openehrtool-backend:
+  image:
+    repository: "registry.example.org/openehrtool-backend"
+    tag: "ohs"
+    pullPolicy: Always
+
+openehrtool-frontend:
+  image:
+    repository: "registry.example.org/openehrtool-frontend"
+    tag: "ohs"
+    pullPolicy: Always
+
+# Keycloak: Portalnutzer research mit allen Portalrollen. Passwort aus
+# ohs-credentials/keycloak-research-password (scripts/create-secret.sh). Wirkt nur beim
+# Anlegen des Realms auf leerer Datenbank; die Freischaltung im Portal setzt der
+# Hook-Job numportal-user-seed.
+keycloak:
+  config:
+    researchUser:
+      enabled: true
+
+# eos: Die Probes des Basis-Charts treffen den falschen Port (Eos lauscht auf 8081),
+# deshalb TCP-Check statt HTTP. EHRbase braucht hier nichts: Seine Probes kommen aus
+# charts/ehrbase/values.yaml (Readiness mit Datenbankpruefung, M-63). Die TCP-
+# Uebersteuerung, die bis 2026-09-15 hier stand, hob genau diese Pruefung auf.
+eos:
+  livenessProbe:
+    httpGet: null
+    tcpSocket:
+      port: 8081
+  readinessProbe:
+    httpGet: null
+    tcpSocket:
+      port: 8081

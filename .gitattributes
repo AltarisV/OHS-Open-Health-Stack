@@ -1,0 +1,3 @@
+# Patches werden auf der Linux-Buildmaschine mit git apply angewandt und muessen
+# dort LF haben, auch wenn das Repo unter Windows mit autocrlf ausgecheckt ist.
+*.patch text eol=lf

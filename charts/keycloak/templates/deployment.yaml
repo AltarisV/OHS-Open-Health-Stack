@@ -126,21 +126,40 @@ spec:
           done
       {{- end }}
       {{- if .Values.config.realmImport.enabled }}
-      # Substitutes __NUM_PORTAL_CLIENT_SECRET__ in the realm JSON with the actual secret
-      # value, writing the result to an emptyDir that the main container imports from.
+      # Replaces the placeholders in the realm JSON (see configmap-realm.yaml) and writes
+      # the result to an emptyDir that the main container imports from. Values are escaped
+      # for JSON first and for sed second, so secrets may contain " \ | and &.
       - name: realm-config
         image: busybox:1.36
         command: ["/bin/sh", "-c"]
         args:
           - |
-            sed "s|__NUM_PORTAL_CLIENT_SECRET__|${NUM_PORTAL_CLIENT_SECRET}|g" \
-              /import-source/crr-realm.json > /import/crr-realm.json
+            set -e
+            SRC=/import-source/crr-realm.json; DST=/import/crr-realm.json
+            jesc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+            sesc() { printf '%s' "$1" | sed -e 's/[|&\\]/\\&/g'; }
+            PW="${RESEARCH_USER_PASSWORD:-}"
+            if grep -q __RESEARCH_USER_PASSWORD__ "$SRC" && [ -z "$PW" ]; then
+              PW=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
+              echo "NOTE: keycloak-research-password is empty - user research gets a random password (reset it in the admin console)" >&2
+            fi
+            sed -e "s|__NUM_PORTAL_CLIENT_SECRET__|$(sesc "$(jesc "$NUM_PORTAL_CLIENT_SECRET")")|g" \
+                -e "s|__RESEARCH_USER_PASSWORD__|$(sesc "$(jesc "$PW")")|g" \
+                "$SRC" > "$DST"
         env:
         - name: NUM_PORTAL_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               name: ohs-credentials
               key: numportal-keycloak-secret
+        {{- if .Values.config.researchUser.enabled }}
+        - name: RESEARCH_USER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ohs-credentials
+              key: keycloak-research-password
+              optional: true
+        {{- end }}
         volumeMounts:
         - name: realm-source
           mountPath: /import-source

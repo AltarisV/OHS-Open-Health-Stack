@@ -12,16 +12,19 @@ OHS is a Kubernetes-native platform combining:
 
 Maintained diagrams live in [`diagrams/`](diagrams/):
 
+- **[`architecture.mmd.md`](diagrams/architecture.mmd.md)** - diagram-as-code (Mermaid),
+  rendered inline on GitHub. **This is the maintained source.** Three views: logical /
+  component, Kubernetes deployment as the chart ships it, and the end-to-end data flow.
 - **[`architecture.drawio`](diagrams/architecture.drawio)** - print-quality, editable in
-  [diagrams.net](https://app.diagrams.net) or the draw.io VS Code extension. Three pages:
-  logical view, Kubernetes deployment, and end-to-end data flow.
-- **[`architecture.mmd.md`](diagrams/architecture.mmd.md)** - the same three views as
-  diagram-as-code (Mermaid), rendered inline on GitHub.
+  [diagrams.net](https://app.diagrams.net) or the draw.io VS Code extension. **Out of
+  date** as of 2026-09-03: it still draws two separate PostgreSQL instances (there is
+  one, with four databases). Redraw from the Mermaid views before using
+  it in a report.
 
 The **logical / component view** (primary data flow) is rendered in the
 [project README](../README.md#architecture). The **Kubernetes deployment view** and the
-**end-to-end data flow** (openEHR hub; AQL cohorts; FHIR/OMOP exports) are in
-[`diagrams/architecture.mmd.md`](diagrams/architecture.mmd.md).
+**end-to-end data flow** (openEHR hub; AQL cohorts;
+FHIR/OMOP exports) are in [`diagrams/architecture.mmd.md`](diagrams/architecture.mmd.md).
 
 ## Helm Chart Structure
 

@@ -1,0 +1,152 @@
+[
+  {
+    "name": "Diagnose vorhanden (IS-H)",
+    "nameTranslated": "Diagnosis documented (IS-H)",
+    "purpose": "Wählt alle Patienten aus, für die mindestens eine kodierte Diagnose aus dem SAP-IS-H-Export in EHRbase vorliegt.",
+    "purposeTranslated": "Selects all patients with at least one coded diagnosis from the SAP IS-H export stored in EHRbase.",
+    "use": "Als Basis-Einschlusskriterium für alle diagnosebezogenen Projekte oder um Datensätze ohne jede Diagnosedokumentation auszuschließen.",
+    "useTranslated": "Use as a baseline inclusion criterion for any diagnosis-related project, or to exclude records without coded diagnoses.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Diagnose_ISH')",
+    "publicAql": true
+  },
+  {
+    "name": "Prozedur vorhanden (IS-H)",
+    "nameTranslated": "Procedure documented (IS-H)",
+    "purpose": "Wählt Patienten mit mindestens einer dokumentierten Prozedur (OPS-kodiert) aus dem SAP-IS-H-Export aus.",
+    "purposeTranslated": "Selects patients with at least one documented procedure (OPS coded) from the SAP IS-H export.",
+    "use": "Für Fragestellungen zu Eingriffen und Behandlungsverfahren, typischerweise kombiniert mit einem Diagnosekriterium.",
+    "useTranslated": "For questions about interventions and treatment procedures, typically combined with a diagnosis criterion.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Prozedur_ISH')",
+    "publicAql": true
+  },
+  {
+    "name": "Medikationseintrag vorhanden (IS-H)",
+    "nameTranslated": "Medication entry documented (IS-H)",
+    "purpose": "Wählt Patienten mit mindestens einem Medikationseintrag aus dem SAP-IS-H-Export aus.",
+    "purposeTranslated": "Selects patients with at least one medication entry from the SAP IS-H export.",
+    "use": "Grundlage für Arzneimittel- und Verordnungsanalysen sowie als Vorfilter vor wirkstoffspezifischen Kriterien.",
+    "useTranslated": "Basis for medication and prescription analyses, and as a pre-filter ahead of substance-specific criteria.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.medication_list.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Medikationseintrag_ISH')",
+    "publicAql": true
+  },
+  {
+    "name": "Laborbefund vorhanden",
+    "nameTranslated": "Laboratory report available",
+    "purpose": "Wählt Patienten aus, für die mindestens ein Laborbericht in EHRbase gespeichert ist.",
+    "purposeTranslated": "Selects patients with at least one laboratory report stored in EHRbase.",
+    "use": "Als Vorfilter für alle laborwertbasierten Auswertungen, damit Patienten ohne Labordaten die Kohorte nicht verwässern.",
+    "useTranslated": "As a pre-filter for lab-value based analyses so that patients without lab data do not dilute the cohort.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report-result.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Laborbericht')",
+    "publicAql": true
+  },
+  {
+    "name": "Vitalparameter vorhanden",
+    "nameTranslated": "Vital signs available",
+    "purpose": "Wählt Patienten mit mindestens einer dokumentierten Vitalparameter-Messung aus.",
+    "purposeTranslated": "Selects patients with at least one documented vital sign measurement.",
+    "use": "Für Verlaufs- und Monitoring-Fragestellungen sowie als Voraussetzung für messwertbasierte Unterkriterien.",
+    "useTranslated": "For trend and monitoring questions, and as a prerequisite for measurement-based sub-criteria.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] WHERE (c0/archetype_details/template_id/value = 'Vitalparameter')",
+    "publicAql": true
+  },
+  {
+    "name": "Stationärer Fall vorhanden (IS-H)",
+    "nameTranslated": "Inpatient case documented (IS-H)",
+    "purpose": "Wählt Patienten aus, für die mindestens ein Fall aus dem SAP-IS-H-Export dokumentiert ist.",
+    "purposeTranslated": "Selects patients with at least one case documented in the SAP IS-H export.",
+    "use": "Zur Abgrenzung tatsächlich behandelter Patienten von rein administrativ angelegten Datensätzen.",
+    "useTranslated": "To separate patients who were actually treated from purely administrative records.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.fall.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Fall_ISH')",
+    "publicAql": true
+  },
+  {
+    "name": "Allergie oder Unverträglichkeit dokumentiert",
+    "nameTranslated": "Allergy or intolerance documented",
+    "purpose": "Wählt Patienten mit mindestens einem Eintrag in der Allergieliste aus.",
+    "purposeTranslated": "Selects patients with at least one entry in the allergy list.",
+    "use": "Für Fragestellungen zur Arzneimittelsicherheit und zur Analyse von Kontraindikationen.",
+    "useTranslated": "For drug safety questions and the analysis of contraindications.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.adverse_reaction_list.v1] WHERE (c0/archetype_details/template_id/value = 'Allergieliste_ISH')",
+    "publicAql": true
+  },
+  {
+    "name": "Pseudonymisierte Personendaten vorhanden",
+    "nameTranslated": "Pseudonymised person data available",
+    "purpose": "Wählt Patienten aus, für die ein pseudonymisierter Stammdatensatz mit demografischen Angaben vorliegt.",
+    "purposeTranslated": "Selects patients for whom a pseudonymised master record with demographic data exists.",
+    "use": "Technisches Qualitätskriterium: stellt sicher, dass Alter und Geschlecht für Stratifizierungen verfügbar sind.",
+    "useTranslated": "Technical quality criterion: ensures age and sex are available for stratification.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.person.v0] WHERE (c0/archetype_details/template_id/value = 'KDS_Person_Pseudonymisiert')",
+    "publicAql": true
+  },
+  {
+    "name": "Fall im Jahr 2024",
+    "nameTranslated": "Inpatient case during 2024",
+    "purpose": "Wählt Patienten mit mindestens einem Fall aus, dessen Beginn im Kalenderjahr 2024 liegt.",
+    "purposeTranslated": "Selects patients with at least one case whose start date falls within calendar year 2024.",
+    "use": "Für jahresbezogene Auswertungen; die Jahreszahlen im AQL können für andere Zeiträume angepasst werden.",
+    "useTranslated": "For year-based analyses; adjust the years in the AQL for other periods.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.fall.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Fall_ISH' AND c0/context/start_time/value >= '2024-01-01T00:00:00' AND c0/context/start_time/value <= '2024-12-31T23:59:59')",
+    "publicAql": true
+  },
+  {
+    "name": "Stationärer Aufenthalt ab 2024",
+    "nameTranslated": "Inpatient stay from 2024 onwards",
+    "purpose": "Wählt Patienten mit einem dokumentierten Patientenaufenthalt ab dem 01.01.2024 aus.",
+    "purposeTranslated": "Selects patients with a documented inpatient stay from 1 January 2024 onwards.",
+    "use": "Um die Kohorte auf den Erfassungszeitraum des IS-H-Exports 2024/25 zu beschränken.",
+    "useTranslated": "To restrict the cohort to the 2024/25 coverage period of the IS-H export.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.event_summary.v0] WHERE (c0/archetype_details/template_id/value = 'Patientenaufenthalt_ISH' AND c0/context/start_time/value >= '2024-01-01T00:00:00')",
+    "publicAql": true
+  },
+  {
+    "name": "Diagnose Diabetes mellitus Typ 2 (ICD-10 E11)",
+    "nameTranslated": "Diagnosis of type 2 diabetes mellitus (ICD-10 E11)",
+    "purpose": "Wählt Patienten mit mindestens einer Diagnose aus der ICD-10-Gruppe E11 einschließlich aller Subkodes aus.",
+    "purposeTranslated": "Selects patients with at least one diagnosis from ICD-10 group E11, including all subcodes.",
+    "use": "Kern-Einschlusskriterium für Diabetes-Kohorten; das Muster 'E11*' lässt sich auf andere ICD-Gruppen übertragen.",
+    "useTranslated": "Core inclusion criterion for diabetes cohorts; the pattern 'E11*' can be adapted to other ICD groups.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] CONTAINS EVALUATION o1[openEHR-EHR-EVALUATION.problem_diagnosis.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Diagnose_ISH' AND o1/data[at0001]/items[at0002]/value/defining_code/code_string LIKE 'E11*')",
+    "publicAql": true
+  },
+  {
+    "name": "Diagnose essentielle Hypertonie (ICD-10 I10)",
+    "nameTranslated": "Diagnosis of essential hypertension (ICD-10 I10)",
+    "purpose": "Wählt Patienten mit einer kodierten Diagnose der essentiellen Hypertonie (ICD-10-GM I10 mit allen Subkodes) aus.",
+    "purposeTranslated": "Selects patients with a coded diagnosis of essential hypertension (ICD-10-GM I10 including all subcodes).",
+    "use": "Häufiges Ein- oder Ausschlusskriterium. ICD-10-GM vergibt I10 nur fünfstellig (I10.00 bis I10.91); der exakte Vergleich auf 'I10' fand am 15.09.2026 niemanden.",
+    "useTranslated": "Common inclusion or exclusion criterion. ICD-10-GM only assigns I10 as five-character codes (I10.00 to I10.91); an exact match on 'I10' found no one on 2026-09-15.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] CONTAINS EVALUATION o1[openEHR-EHR-EVALUATION.problem_diagnosis.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Diagnose_ISH' AND o1/data[at0001]/items[at0002]/value/defining_code/code_string LIKE 'I10*')",
+    "publicAql": true
+  },
+  {
+    "name": "Systolischer Blutdruck ab 140 mmHg",
+    "nameTranslated": "Systolic blood pressure 140 mmHg or above",
+    "purpose": "Wählt Patienten mit mindestens einer Blutdruckmessung mit systolischem Wert von 140 mmHg oder höher aus.",
+    "purposeTranslated": "Selects patients with at least one blood pressure measurement with a systolic value of 140 mmHg or above.",
+    "use": "Ergänzt die kodierte Diagnose um den gemessenen Befund; gut geeignet als Vergleich zu ICD-10 I10.",
+    "useTranslated": "Complements the coded diagnosis with the measured finding; useful as a comparison against ICD-10 I10.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report.v1] CONTAINS OBSERVATION o1[openEHR-EHR-OBSERVATION.blood_pressure.v2] WHERE (c0/archetype_details/template_id/value = 'Vitalparameter' AND o1/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude >= 140)",
+    "publicAql": true
+  },
+  {
+    "name": "Laboranalyt über Grenzwert",
+    "nameTranslated": "Laboratory analyte above threshold",
+    "purpose": "Wählt Patienten mit mindestens einem quantitativen Laboranalyten oberhalb des im AQL hinterlegten Grenzwerts aus.",
+    "purposeTranslated": "Selects patients with at least one quantitative laboratory analyte above the threshold defined in the AQL.",
+    "use": "Vorlage zum Duplizieren für konkrete Analyte wie Kreatinin, CRP oder HbA1c; Analytname und Grenzwert im AQL anpassen.",
+    "useTranslated": "Template to duplicate for specific analytes such as creatinine, CRP or HbA1c; adjust analyte name and threshold in the AQL.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.report-result.v1] CONTAINS OBSERVATION o1[openEHR-EHR-OBSERVATION.laboratory_test_result.v1] CONTAINS CLUSTER l2[openEHR-EHR-CLUSTER.laboratory_test_analyte.v1] WHERE (c0/archetype_details/template_id/value = 'KDS_Laborbericht' AND l2/items[at0001]/value/magnitude > 1.2)",
+    "publicAql": true
+  },
+  {
+    "name": "Geburtsjahr vor 1961 (Alter ab 65)",
+    "nameTranslated": "Born before 1961 (age 65 and above)",
+    "purpose": "Wählt Patienten aus, deren Geburtsdatum in den pseudonymisierten Stammdaten vor dem 01.01.1961 liegt.",
+    "purposeTranslated": "Selects patients whose date of birth in the pseudonymised master data is before 1 January 1961.",
+    "use": "Altersabgrenzung für geriatrische Fragestellungen, da openEHR kein berechnetes Alter führt; Stichtagsjahr im AQL anpassen.",
+    "useTranslated": "Age cut-off for geriatric questions, as openEHR does not store a calculated age; adjust the cut-off year in the AQL.",
+    "query": "SELECT e FROM EHR e CONTAINS COMPOSITION c0[openEHR-EHR-COMPOSITION.person.v0] CONTAINS CLUSTER l1[openEHR-EHR-CLUSTER.person_birth_data_iso.v0] WHERE (c0/archetype_details/template_id/value = 'KDS_Person_Pseudonymisiert' AND l1/items[at0001]/value/value < '1961-01-01')",
+    "publicAql": true
+  }
+]

@@ -1,16 +1,18 @@
 # OHS Architecture Diagrams (Mermaid)
 
-Diagram-as-code companions to the polished [`architecture.drawio`](architecture.drawio)
-file. Three views:
+**This file is the maintained source.** The [`architecture.drawio`](architecture.drawio)
+next to it is out of date (two PostgreSQL cylinders, no Keycloak, nginx ingress) and
+should be redrawn from these views before it goes into a report. Three views:
 
 1. **Logical / component view** - what the services are and how data moves between them.
-2. **Kubernetes deployment view** - how the stack runs in the cluster.
+2. **Kubernetes deployment view** - how the stack runs in the cluster, as the chart ships it.
 3. **End-to-end data flow** - the path of a single record from ingestion to analytics.
 
 > Renders directly in GitHub, the VS Code Mermaid preview, and most Markdown
-> toolchains. For a print-quality figure, export the draw.io version to SVG/PDF.
+> toolchains. For a print-quality figure, export the draw.io version to SVG/PDF
+> once it has been brought up to date.
 
-Shared palette (used across all three diagrams):
+Shared palette (used across all diagrams):
 
 | Role | Fill / stroke |
 |------|---------------|
@@ -21,48 +23,77 @@ Shared palette (used across all three diagrams):
 | Secret / PVC | `#fadbd8` / `#b03a2e` (red) |
 | External / client | `#eeeeee` / `#777777` (grey) |
 
+**One PostgreSQL, four databases.** EHRbase, Eos, the Cohort Explorer backend and
+Keycloak all point at `postgres-cluster-rw.ohs.svc.cluster.local` and differ only in
+the database they open (`values.yaml`, line 48: *"keycloak, numportal and eos_omop
+share the instance"*). Earlier revisions of these diagrams drew two PostgreSQL
+cylinders, which hid the coupling: when that one volume filled up during a bulk load,
+every service on it went down together, not just EHRbase.
+
+**openFHIR is a mapping engine, not a FHIR store.** It converts openEHR compositions to
+FHIR resources and back (`/openfhir/tofhir`, `/openfhir/toopenehr`, see
+`VERIFICATION.md`). MongoDB holds its FhirConnect model mappings and operational
+templates, not patient data. Earlier revisions labelled MongoDB a "FHIR cache".
+
 ---
 
 ## Logical / Component view + primary data flow
 
+*Arrows point from caller to callee - who initiates the request.*
+
 ```mermaid
 flowchart TB
-    src["External source /<br/>openEHRTool-v2"]:::ext
+    src["External source /<br/>openEHRTool-v2 / ETL"]:::ext
 
     subgraph apps["Application services"]
         ehrbase["EHRbase<br/>openEHR EHR store"]:::app
-        openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
+        openfhir["openFHIR<br/>openEHR ⇄ FHIR mapping engine"]:::app
         eos["Eos<br/>openEHR → OMOP ETL"]:::app
+        ehrsuction["EHRsuction<br/>composition export (CronJob)"]:::app
         cohort["Cohort Explorer<br/>openEHR / AQL cohort UI"]:::app
+        keycloak["Keycloak<br/>OIDC, realm crr"]:::app
     end
 
     subgraph data["Data stores"]
-        pg_ehr[("PostgreSQL<br/>ehrbase DB")]:::db
-        mongo[("MongoDB<br/>FHIR cache")]:::db
-        pg_omop[("PostgreSQL<br/>eos_omop DB<br/>OMOP CDM")]:::db
+        pg[("PostgreSQL — ONE CNPG instance<br/>databases: ehrbase · eos_omop ·<br/>numportal · keycloak")]:::db
+        mongo[("MongoDB<br/>FhirConnect mappings, OPTs")]:::db
+        exportvol[/"Export volume (PVC)"/]:::secret
     end
 
     analyst["Researcher"]:::ext
     omoptools["External OMOP /<br/>OHDSI analytics tools"]:::ext
 
     src -->|"REST: create EHR / compositions"| ehrbase
-    ehrbase --> pg_ehr
-    openfhir -->|"reads compositions"| ehrbase
-    openfhir -->|"FHIR resources"| mongo
+    ehrbase -->|"db: ehrbase"| pg
+    openfhir <-->|"compositions ⇄ FHIR resources"| ehrbase
+    openfhir -->|"mappings / OPTs"| mongo
     eos -->|"reads compositions"| ehrbase
-    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ... → db: eos_omop"| pg
+    ehrsuction -->|"reads compositions"| ehrbase
+    ehrsuction -->|"export files"| exportvol
     cohort -->|"AQL queries"| ehrbase
+    cohort -->|"db: numportal"| pg
+    cohort -->|"OIDC login"| keycloak
+    keycloak -->|"db: keycloak"| pg
     analyst -->|"define / run cohorts"| cohort
-    pg_omop -.->|"OMOP CDM (external use)"| omoptools
+    pg -.->|"eos_omop, external use"| omoptools
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
     classDef db  fill:#e6f2e6,stroke:#4f8a4f,color:#222;
+    classDef secret fill:#fadbd8,stroke:#b03a2e,color:#222;
 ```
 
 ---
 
 ## Kubernetes deployment view
+
+As the **chart** ships it: the built-in Ingress object with the path list from
+`values.yaml`.
+
+The two operators are **not** part of the chart (the `cloudnative-pg` and
+`mongodb-operator` subcharts carry no templates); they are installed beforehand.
+`DEPLOYMENT.md` puts the MongoDB operator in its own namespace `mongodb-operator`.
 
 ```mermaid
 flowchart TB
@@ -71,35 +102,35 @@ flowchart TB
     subgraph cluster["Kubernetes cluster"]
         direction TB
 
-        subgraph operators["Operator namespaces (cluster-wide)"]
-            cnpg["CloudNativePG operator<br/>(ns: cnpg-system)"]:::op
-            mongoop["MongoDB Community operator<br/>(ns: mongodb-operator)"]:::op
-        end
+        cnpg["CloudNativePG operator<br/>(pre-installed, ns cnpg-system)"]:::op
 
-        ingress{{"Ingress controller<br/>nginx / traefik · TLS via cert-manager"}}:::ingress
+        ingress{{"Ingress object from the chart<br/>class nginx · TLS via cert-manager<br/>(ingress.enabled, values.yaml)"}}:::ingress
 
         subgraph ns["Namespace: ohs"]
             direction TB
 
+            mongoop["MongoDB Community operator<br/>(pre-installed, watches ns ohs)"]:::op
+
             subgraph applayer["App layer - Deployments + Services"]
-                ehrbase["EHRbase :8080"]:::app
-                openfhir["openFHIR :8080"]:::app
+                ehrbase["EHRbase :8080<br/>2 replicas"]:::app
+                openfhir["openFHIR :8080<br/>2 replicas"]:::app
                 eos["Eos :8081"]:::app
                 keycloak["Keycloak :8080"]:::app
-                ce_fe["Cohort Explorer FE"]:::app
-                ce_be["Cohort Explorer BE"]:::app
-                tool_fe["openEHRTool FE"]:::app
-                tool_be["openEHRTool BE"]:::app
+                ce_fe["Cohort Explorer FE :80"]:::app
+                ce_be["Cohort Explorer BE :8090"]:::app
+                tool_fe["openEHRTool FE :80"]:::app
+                tool_be["openEHRTool BE :5000"]:::app
+                redis[("openEHRTool Redis :6379<br/>Deployment, cache only, no PVC")]:::db
+                ehrsuction["EHRsuction<br/>CronJob"]:::app
             end
 
             subgraph datalayer["Data layer - StatefulSets (operator-managed)"]
-                pg[("PostgreSQL cluster (CNPG)<br/>ehrbase · eos_omop · numportal")]:::db
-                mongo[("MongoDB cluster")]:::db
-                redis[("Redis")]:::db
+                pg[("PostgreSQL cluster (CNPG) - ONE instance<br/>ehrbase · eos_omop · numportal · keycloak")]:::db
+                mongo[("MongoDB cluster<br/>FhirConnect mappings, OPTs")]:::db
             end
 
             secret[/"Secret: ohs-credentials"/]:::secret
-            pvc[/"PersistentVolumeClaims"/]:::secret
+            pvc[/"PersistentVolumeClaims<br/>postgres · mongodb · ehrsuction-export"/]:::secret
         end
     end
 
@@ -112,10 +143,16 @@ flowchart TB
     ingress -->|"/num-portal"| ce_be
     ingress -->|"/cohort-explorer"| ce_fe
 
-    ehrbase -->|":5432"| pg
-    eos -->|":5432"| pg
-    ce_be -->|":5432"| pg
+    ehrbase -->|":5432 db ehrbase"| pg
+    eos -->|":5432 db eos_omop"| pg
+    ce_be -->|":5432 db numportal"| pg
+    keycloak -->|":5432 db keycloak"| pg
     openfhir -->|":27017"| mongo
+    openfhir <-->|":8080 REST"| ehrbase
+    eos -->|":8080 REST"| ehrbase
+    ehrsuction -->|":8080 REST"| ehrbase
+    ce_be -->|":8080 AQL"| ehrbase
+    tool_be -->|":8080 REST"| ehrbase
     tool_be --> redis
     tool_fe --> tool_be
 
@@ -123,7 +160,7 @@ flowchart TB
     mongoop -.->|manages| mongo
     pg -.-> pvc
     mongo -.-> pvc
-    redis -.-> pvc
+    ehrsuction -.->|"/export"| pvc
     secret -.->|env injection| applayer
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
@@ -137,30 +174,39 @@ flowchart TB
     %% dashed arrow = "managed by" / mounts (operator → CRD, store → PVC, Secret → pods)
 ```
 
+Local installs (`values-local.yaml`) set `ingress.enabled: false` - there is no
+entrypoint at all, services are reached with `kubectl port-forward`. The paths above
+therefore exist in **neither** deployment as drawn; they are the chart's default for
+the placeholder host `ohs.example.org`.
+
 ---
 
 ## End-to-end data flow (single record)
 
 Traces one clinical record from ingestion to use. openEHR in EHRbase is the hub:
-the **Cohort Explorer** queries it directly via AQL, while **openFHIR** (FHIR) and
-**Eos** (OMOP CDM) produce parallel representations for interoperability and external
-analytics.
+the **Cohort Explorer** queries it directly via AQL, **Eos** (OMOP CDM) produces a
+parallel representation for external analytics, **openFHIR** converts compositions to
+FHIR resources on request (and FHIR back to openEHR), and **EHRsuction** exports raw
+compositions to a volume.
+
+*Arrows follow the data here, not the caller - Eos, EHRsuction and openFHIR pull from
+EHRbase.*
 
 ```mermaid
 flowchart LR
     user["Clinician / data source"]:::ext
 
     subgraph capture["1 · Capture (openEHR)"]
-        tool["openEHRTool-v2"]:::app
+        tool["openEHRTool-v2 / ETL"]:::app
         ehrbase["EHRbase"]:::app
-        pg_ehr[("ehrbase DB")]:::db
     end
 
     subgraph export["2 · Transform / Export"]
-        openfhir["openFHIR<br/>→ FHIR R4"]:::app
+        openfhir["openFHIR<br/>openEHR ⇄ FHIR R4"]:::app
         eos["Eos<br/>→ OMOP CDM"]:::app
-        mongo[("MongoDB<br/>FHIR cache")]:::db
-        pg_omop[("eos_omop DB<br/>OMOP CDM")]:::db
+        ehrsuction["EHRsuction<br/>→ composition files"]:::app
+        mongo[("MongoDB<br/>FhirConnect mappings, OPTs")]:::db
+        exportvol[/"Export PVC"/]:::secret
         omoptools["External OMOP /<br/>OHDSI tools"]:::ext
     end
 
@@ -170,17 +216,22 @@ flowchart LR
         analyst["Researcher"]:::ext
     end
 
+    pg[("PostgreSQL — ONE CNPG instance<br/>ehrbase · eos_omop · numportal · keycloak")]:::db
+
     user -->|"enter composition"| tool
     tool -->|"REST: store EHR"| ehrbase
-    ehrbase --> pg_ehr
+    ehrbase -->|"db: ehrbase"| pg
 
-    ehrbase -->|"compositions"| openfhir
+    ehrbase <-->|"compositions ⇄ FHIR resources"| openfhir
     ehrbase -->|"compositions"| eos
-    openfhir --> mongo
-    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
-    pg_omop -.->|"external use"| omoptools
+    ehrbase -->|"compositions"| ehrsuction
+    mongo -.->|"mappings / OPTs"| openfhir
+    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ... → db: eos_omop"| pg
+    ehrsuction --> exportvol
+    pg -.->|"eos_omop, external use"| omoptools
 
     ce_be -->|"AQL queries"| ehrbase
+    ce_be -->|"db: numportal"| pg
     ce_fe --> ce_be
     ce_be -->|"cohorts / counts"| ce_fe
     ce_fe --> analyst
@@ -188,4 +239,5 @@ flowchart LR
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
     classDef db  fill:#e6f2e6,stroke:#4f8a4f,color:#222;
+    classDef secret fill:#fadbd8,stroke:#b03a2e,color:#222;
 ```

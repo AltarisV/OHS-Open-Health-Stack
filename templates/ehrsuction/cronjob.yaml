@@ -10,7 +10,9 @@ metadata:
     release: {{ .Release.Name }}
 spec:
   schedule: {{ .Values.ehrsuction.schedule | default "0 3 * * *" | quote }}
-  suspend: {{ .Values.ehrsuction.suspend | default true }}
+  # Not "| default true": default treats false as empty, so suspend: false in the
+  # values would still render true and the schedule could never be switched on.
+  suspend: {{ if kindIs "bool" .Values.ehrsuction.suspend }}{{ .Values.ehrsuction.suspend }}{{ else }}true{{ end }}
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -18,7 +20,9 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: {{ .Values.ehrsuction.backoffLimit | default 1 }}
-      ttlSecondsAfterFinished: 300
+      # One day, not minutes: a failed nightly run must still have its log in the
+      # morning. The history limits above keep the number of jobs bounded.
+      ttlSecondsAfterFinished: 86400
       template:
         metadata:
           labels:
@@ -46,6 +50,8 @@ spec:
                   value: {{ .Values.ehrsuction.config.logging.cmdLevel | default "info" | quote }}
                 - name: EHRSUCTION_FILE_LOG_LEVEL
                   value: {{ .Values.ehrsuction.config.logging.fileLevel | default "debug" | quote }}
+                - name: EHRSUCTION_TEMPLATE_ID
+                  value: {{ .Values.ehrsuction.config.templateId | default "" | quote }}
 
                 - name: EHRBASE_USERNAME
                   value: {{ .Values.ehrsuction.auth.username | quote }}
@@ -86,7 +92,80 @@ spec:
                   PY
 
                   cd /tmp/ehrsuction
-                  python3 /app/ehrsuction.py
+
+                  # Optional filter EHRSUCTION_TEMPLATE_ID. Upstream EHRsuction always exports
+                  # every composition; with a template id the same code paths run on that
+                  # template only (counting, EHR folders, paging, final completeness check).
+                  # Every run appends one summary line to EHR_export/runs.log (counts only),
+                  # so runs stay traceable after their job is cleaned up (TTL 300 s).
+                  # Patched at runtime, so the image stays the upstream build.
+                  python3 - <<'PY'
+                  import os, runpy, sys
+                  from datetime import datetime, timezone
+                  sys.path.insert(0, "/app")
+                  import EHRSuctionClient as oc
+                  from logger_config import logger
+                  tid = os.environ.get("EHRSUCTION_TEMPLATE_ID", "").strip()
+                  if tid:
+                      if "'" in tid:
+                          sys.exit("EHRSUCTION_TEMPLATE_ID must not contain a quote")
+
+                      FROM = ("FROM EHR e CONTAINS COMPOSITION c "
+                              "WHERE c/archetype_details/template_id/value = '%s'" % tid)
+
+                      def rows(self, q):
+                          r = self.session.post(self.query_endpoint, json={"q": q}, verify=False)
+                          if r.status_code == 204:
+                              return []
+                          if r.status_code != 200:
+                              logger.error(f"Query failed with status code {r.status_code}: {r.text}")
+                              sys.exit(1)
+                          return r.json().get("rows") or []
+
+                      def ehr_ids(self):
+                          return [row[0] for row in rows(self, "SELECT DISTINCT e/ehr_id/value " + FROM)]
+
+                      def count_compositions(self):
+                          found = rows(self, "SELECT COUNT(c/uid/value) " + FROM)
+                          self.counted_compositions = found[0][0] if found else 0
+                          logger.info(f"Compositions counted for template {tid}: {self.counted_compositions}")
+
+                      def create_all_ehr_folders(self):
+                          for ehr_id in ehr_ids(self):
+                              self.fileHandler.write_ehr_folder(ehr_id)
+
+                      def count_ehrs(self):
+                          self.counted_ehrs = len(ehr_ids(self))
+
+                      def request_canonical(self, limit, offset):
+                          while True:
+                              page = rows(self, "SELECT e/ehr_id/value, c, c/context/start_time/value " + FROM
+                                          + " ORDER BY c/context/start_time/value LIMIT %d OFFSET %d" % (limit, offset))
+                              if not page:
+                                  break
+                              for item in page:
+                                  self.fileHandler.write_ehr_folder(item[0])
+                              self.process_response_query({"rows": page})
+                              offset += self.steps
+
+                      for f in (count_compositions, create_all_ehr_folders, count_ehrs, request_canonical):
+                          setattr(oc.EHRSuctionClient, f.__name__, f)
+                      logger.info(f"Export restricted to template_id = {tid}")
+
+                  upstream_finished = oc.EHRSuctionClient.finished
+
+                  def finished(self):
+                      upstream_finished(self)
+                      line = "%s template=%s counted_compositions=%s saved_jsons=%s counted_ehrs=%s ehr_folders=%s\n" % (
+                          datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), tid or "*",
+                          self.counted_compositions, self.actual_compositions, self.counted_ehrs, self.actual_ehrs)
+                      runs = os.path.join(os.path.dirname(self.fileHandler.get_output_folder()), "runs.log")
+                      with open(runs, "a", encoding="utf-8") as fh:
+                          fh.write(line)
+
+                  oc.EHRSuctionClient.finished = finished
+                  runpy.run_path("/app/ehrsuction.py", run_name="__main__")
+                  PY
 
               volumeMounts:
                 - name: export

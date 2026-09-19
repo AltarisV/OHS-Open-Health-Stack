@@ -28,6 +28,7 @@ kubectl create secret generic ohs-credentials -n ohs \
   --from-literal=openfhir-mongo-uri="mongodb://openfhir:${OPENFHIR_MONGO_PASSWORD}@mongodb-cluster-svc.ohs.svc.cluster.local:27017/openfhir?replicaSet=mongodb-cluster&authSource=openfhir&authMechanism=SCRAM-SHA-256" \
   --from-literal=keycloak-admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
   --from-literal=numportal-keycloak-secret="${NUMPORTAL_KEYCLOAK_SECRET}" \
+  --from-literal=keycloak-research-password="${KEYCLOAK_RESEARCH_PASSWORD:-}" \
   --from-literal=numportal-pseudonymity-secret="${NUMPORTAL_PSEUDONYMITY_SECRET}" \
   --from-literal=openehrtool-jwt-secret="${OPENEHRTOOL_JWT_SECRET:-change-me-in-production}" \
   --dry-run=client -o yaml | kubectl apply -f -

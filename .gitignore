@@ -33,6 +33,9 @@ kubeconfig.yaml
 Thumbs.db
 *.code-workspace
 
+# Ausgaben von scripts/aql-explain.sh (nur SQL, Plaene und Zahlen, trotzdem nicht ins Repo)
+aql-explain-*/
+
 # Build and temp
 dist/
 build/
@@ -70,3 +73,4 @@ rendered-*.yaml
 .docker/config.json
 .dockercfg
 
+*.bak

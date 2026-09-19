@@ -12,6 +12,9 @@
 #   8083 → keycloak                 (Keycloak auth)
 #   8084 → cohort-explorer-backend  (NUMportal API)
 #   8085 → cohort-explorer-frontend (Cohort Explorer UI)
+#   8086 → openehrtool-frontend     (openEHRTool UI)
+#   5000 → openehrtool-backend      (openEHRTool API; port must stay 5000 -
+#                                    the frontend bundle calls localhost:5000)
 
 set -euo pipefail
 
@@ -36,6 +39,8 @@ $KC port-forward svc/ohs-eos                      8082:8081 -n "$NS" &
 $KC port-forward svc/ohs-keycloak                 8083:8080 -n "$NS" &
 $KC port-forward svc/ohs-cohort-explorer-backend  8084:8090 -n "$NS" &
 $KC port-forward svc/ohs-cohort-explorer-frontend 8085:80   -n "$NS" &
+$KC port-forward svc/ohs-openehrtool-frontend     8086:80   -n "$NS" &
+$KC port-forward svc/ohs-openehrtool-backend      5000:5000 -n "$NS" &
 
 echo ""
 echo "Ready:"
@@ -45,6 +50,8 @@ echo "  http://localhost:8082  EOS"
 echo "  http://localhost:8083  Keycloak"
 echo "  http://localhost:8084  Cohort Explorer Backend"
 echo "  http://localhost:8085  Cohort Explorer Frontend"
+echo "  http://localhost:8086  openEHRTool Frontend"
+echo "  http://localhost:5000  openEHRTool Backend"
 echo ""
 echo "Press Ctrl+C to stop all."
 

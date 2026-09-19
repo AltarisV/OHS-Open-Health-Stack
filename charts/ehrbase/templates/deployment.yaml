@@ -84,11 +84,87 @@ spec:
             secretKeyRef:
               name: postgres-cluster-app
               key: password
-        
+
+        {{- with .Values.config.database.pool }}
+        # Verbindungspool (HikariCP). Ohne keepaliveTime prueft der Pool
+        # leerlaufende Verbindungen nie. Eine vom Cluster-Netz stillgelegte
+        # Verbindung wird dann weiter ausgegeben und scheitert erst beim
+        # Benutzen mit SQLSTATE 08006; der Pool erholt sich davon nicht von
+        # selbst. Am 2026-09-05 hat genau das ein Replikat stillgelegt, ohne
+        # dass Liveness oder Readiness es bemerkt haetten - siehe M-63.
+        {{- if .keepaliveTime }}
+        - name: SPRING_DATASOURCE_HIKARI_KEEPALIVETIME
+          value: {{ .keepaliveTime | quote }}
+        {{- end }}
+        {{- if .maxLifetime }}
+        - name: SPRING_DATASOURCE_HIKARI_MAXLIFETIME
+          value: {{ .maxLifetime | quote }}
+        {{- end }}
+        {{- if .maximumPoolSize }}
+        - name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+          value: {{ .maximumPoolSize | quote }}
+        {{- end }}
+        {{- end }}
+
+        {{- with .Values.config.management }}
+        # Management-Endpunkte. EHRbase liefert sie vollstaendig abgeschaltet
+        # aus (endpoints.access.default und endpoint.health.access auf none,
+        # endpoints.web.access auf ADMIN_ONLY) - daher im Log die Zeile
+        # "Exposing 0 endpoints beneath base path '/management'". Erst diese
+        # Werte machen /ehrbase/management/health fuer einen Probe erreichbar.
+        {{- if .healthAccess }}
+        - name: MANAGEMENT_ENDPOINT_HEALTH_ACCESS
+          value: {{ .healthAccess | quote }}
+        {{- end }}
+        {{- if .webAccess }}
+        - name: MANAGEMENT_ENDPOINTS_WEB_ACCESS
+          value: {{ .webAccess | quote }}
+        {{- end }}
+        {{- if .probesEnabled }}
+        - name: MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED
+          value: "true"
+        {{- end }}
+        {{- if .readinessInclude }}
+        # Die Readiness-Gruppe von Spring Boot enthaelt ab Werk NUR
+        # readinessState, also den Lebenszyklus der Anwendung. Ohne "db" darin
+        # pruefte auch ein HTTP-Probe die Datenbank nicht und waere genauso
+        # blind wie der tcpSocket-Probe, den er ersetzt.
+        - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
+          value: {{ .readinessInclude | quote }}
+        {{- end }}
+        {{- end }}
+
         # Java/JVM configuration
         - name: JAVA_OPTS
           value: "-Xmx{{ .Values.config.jvm.maxHeapSize }} -Xms{{ .Values.config.jvm.minHeapSize }} -XX:+UseG1GC"
         
+        # AQL result limits. Unset by default in EHRbase, which means an AQL
+        # query without a LIMIT streams every matching row into the JVM heap -
+        # on a large repository that ends in OutOfMemoryError and takes the
+        # whole server down for every other client, not just the caller.
+        {{- with .Values.config.aql }}
+        {{- if .defaultLimit }}
+        - name: EHRBASE_REST_AQL_DEFAULTLIMIT
+          value: {{ .defaultLimit | quote }}
+        {{- end }}
+        {{- if .maxLimit }}
+        - name: EHRBASE_REST_AQL_MAXLIMIT
+          value: {{ .maxLimit | quote }}
+        {{- end }}
+        {{- if .maxFetch }}
+        - name: EHRBASE_REST_AQL_MAXFETCH
+          value: {{ .maxFetch | quote }}
+        {{- end }}
+        {{- if .fetchPrecedence }}
+        - name: EHRBASE_REST_AQL_FETCHPRECEDENCE
+          value: {{ .fetchPrecedence | quote }}
+        {{- end }}
+        {{- if .debuggingEnabled }}
+        - name: EHRBASE_REST_AQL_DEBUGGINGENABLED
+          value: "true"
+        {{- end }}
+        {{- end }}
+
         # Logging configuration
         - name: LOGGING_LEVEL_ROOT
           value: {{ .Values.config.logging.level | quote }}

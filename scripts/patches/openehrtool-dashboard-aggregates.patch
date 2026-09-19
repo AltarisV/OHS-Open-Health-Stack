@@ -1,0 +1,131 @@
+diff --git a/backend-fastapi/app/backend_ehrbase/dashboard/dashboard.py b/backend-fastapi/app/backend_ehrbase/dashboard/dashboard.py
+index 6ec6385..f121b3d 100644
+--- a/backend-fastapi/app/backend_ehrbase/dashboard/dashboard.py
++++ b/backend-fastapi/app/backend_ehrbase/dashboard/dashboard.py
+@@ -1,4 +1,5 @@
+ import json
++from collections import Counter
+ import httpx
+ from fastapi import FastAPI, HTTPException, Depends, Request
+ from url_normalize import url_normalize
+@@ -37,41 +38,42 @@ async def get_dashboard_data_ehrbase(
+             metrics["aqlsCount"] = len(aqls)
+         else:
+             metrics["aqlsCount"] = "Unavailable"
++        # OHS patch: every figure below is computed by EHRbase with AQL aggregates.
++        # Upstream fetched one row per composition and counted in Python. With
++        # millions of compositions that exhausted EHRbase's heap, and behind an AQL
++        # default limit the figures silently stopped at that limit.
++        aqlurl = url_normalize(url_base + "/query/aql")
++        aqlheaders = {"Authorization": auth, "Content-Type": "application/json"}
++
++        async def aql_rows(aqltext):
++            response = await fetch_post_data(
++                client=client, url=aqlurl, headers=aqlheaders,
++                data=json.dumps({"q": aqltext}),
++            )
++            if response.status_code == 204 or not response.text:
++                return []
++            if 199 < response.status_code < 210:
++                return json.loads(response.text)["rows"]
++            return None
++
++        def single(rows):
++            return rows[0][0] if rows else 0
++
+         # ehrsCount
+-        myurl = url_normalize(url_base + "/query/aql")
+-        data = {}
+-        aqltext = "SELECT e/ehr_id/value FROM EHR e"
+-        data["q"] = aqltext
+-        headers = {"Authorization": auth, "Content-Type": "application/json"}
+-        response = await fetch_post_data(
+-            client=client, url=myurl, headers=headers, data=json.dumps(data)
++        rows = await aql_rows("SELECT COUNT(e/ehr_id/value) FROM EHR e")
++        metrics["ehrsCount"] = "Unavailable" if rows is None else single(rows)
++        # compositionsCount, ehrsInUse, templatesInUse
++        per_template = await aql_rows(
++            "SELECT c/archetype_details/template_id/value, COUNT(c/uid/value)"
++            " FROM EHR e CONTAINS COMPOSITION c"
+         )
+-        if 199 < response.status_code < 210:
+-            ehrs = json.loads(response.text)["rows"]
+-            metrics["ehrsCount"] = len(ehrs)
+-        else:
+-            metrics["ehrsCount"] = "Unavailable"
+-        # templatesInUse
+-        # ehrsInUse,compositionsCount,templatesInUse
+-        myurl = url_normalize(url_base + "/query/aql")
+-        data = {}
+-        aqltext = "SELECT e/ehr_id/value,c/uid/value,c/archetype_details/template_id/value FROM EHR e CONTAINS COMPOSITION c"
+-        data["q"] = aqltext
+-        headers = {"Authorization": auth, "Content-Type": "application/json"}
+-        response = await fetch_post_data(
+-            client=client, url=myurl, headers=headers, data=json.dumps(data)
++        ehrs_in_use = await aql_rows(
++            "SELECT COUNT(DISTINCT e/ehr_id/value) FROM EHR e CONTAINS COMPOSITION c"
+         )
+-        ehrs_in_use = set()
+-        templates_in_use = set()
+-        compositions = {}
+-        if 199 < response.status_code < 210:
+-            compositions = json.loads(response.text)["rows"]
+-            metrics["compositionsCount"] = len(compositions)
+-            # compute ehrsInUse,templatesInUse
+-            ehrs_in_use = set(r[0] for r in compositions)
+-            metrics["ehrsInUse"] = len(ehrs_in_use)
+-            templates_in_use = set(r[2] for r in compositions)
+-            metrics["templatesInUse"] = len(templates_in_use)
++        if per_template is not None and ehrs_in_use is not None:
++            metrics["compositionsCount"] = sum(r[1] for r in per_template)
++            metrics["ehrsInUse"] = single(ehrs_in_use)
++            metrics["templatesInUse"] = len(per_template)
+         else:
+             metrics["compositionsCount"] = "Unavailable"
+             metrics["ehrsInUse"] = "Unavailable"
+@@ -90,33 +92,21 @@ async def get_dashboard_data_ehrbase(
+         else:
+             metrics["templatesCount"] = "Unavailable"
+         # get barData==#ehrs (Y) for a given #compositions (X)
++        # One row per EHR in use - stays below the default limit as long as the
++        # number of EHRs does.
+         barData = {}
+-        if ehrs_in_use and compositions:
+-            c = [0] * len(ehrs_in_use)
+-            for i, e in enumerate(ehrs_in_use):
+-                c[i] = 0
+-                for r in compositions:
+-                    if r[0] == e:
+-                        c[i] += 1
+-            cpe = {i: c.count(i) for i in c}
+-
+-            barData = cpe
++        per_ehr = await aql_rows(
++            "SELECT e/ehr_id/value, COUNT(c/uid/value) FROM EHR e CONTAINS COMPOSITION c"
++        )
++        if per_ehr:
++            barData = dict(sorted(Counter(r[1] for r in per_ehr).items()))
+         # get pieData==compositions per template
+         pieData = {}
+-        if templates_in_use and compositions:
+-            d = {}
+-            for i, t in enumerate(templates_in_use):
+-                for r in compositions:
+-                    if r[2] == t:
+-                        if t in d:
+-                            d[t] += 1
+-                        else:
+-                            d[t] = 1
+-            pieData = d
+-            # percentage in new pieData
+-            total_compositions = len(compositions)
+-            for k, v in pieData.items():
+-                pieData[k] = round((v / total_compositions) * 100, 2)
++        if per_template:
++            total_compositions = sum(r[1] for r in per_template)
++            pieData = {
++                r[0]: round((r[1] / total_compositions) * 100, 2) for r in per_template
++            }
+         # get info
+         # info from status
+         myurl = url_normalize(url_base_status)

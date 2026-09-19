@@ -15,7 +15,6 @@ A Kubernetes-native Helm umbrella chart that deploys a unified health data platf
 | **Keycloak**                   | Identity and access management          | Active         | `quay.io/keycloak/keycloak:24.0`                                                    |
 | **CloudNativePG**              | PostgreSQL operator                     | Active         | `1.21.0`                                                                            |
 | **MongoDB Community Operator** | MongoDB operator                        | Active         | `0.8.0`                                                                             |
-| **CSV-to-openEHR**             | Bulk import from CSV                    | Placeholder    |                                                                                     |
 
 ## Architecture
 
@@ -24,42 +23,56 @@ FHIR (openFHIR) and transformed to the OMOP CDM (Eos) for analytics:
 
 ```mermaid
 flowchart TB
-    src["External source /<br/>openEHRTool-v2"]:::ext
+    src["External source /<br/>openEHRTool-v2 / ETL"]:::ext
 
     subgraph apps["Application services"]
         ehrbase["EHRbase<br/>openEHR EHR store"]:::app
-        openfhir["openFHIR<br/>FHIR R4 bridge"]:::app
+        openfhir["openFHIR<br/>openEHR ⇄ FHIR mapping engine"]:::app
         eos["Eos<br/>openEHR → OMOP ETL"]:::app
+        ehrsuction["EHRsuction<br/>composition export (CronJob)"]:::app
         cohort["Cohort Explorer<br/>openEHR / AQL cohort UI"]:::app
+        keycloak["Keycloak<br/>OIDC, realm crr"]:::app
     end
 
     subgraph data["Data stores"]
-        pg_ehr[("PostgreSQL<br/>ehrbase DB")]:::db
-        mongo[("MongoDB<br/>FHIR cache")]:::db
-        pg_omop[("PostgreSQL<br/>eos_omop DB<br/>OMOP CDM")]:::db
+        pg[("PostgreSQL — ONE CNPG instance<br/>databases: ehrbase · eos_omop ·<br/>numportal · keycloak")]:::db
+        mongo[("MongoDB<br/>FhirConnect mappings, OPTs")]:::db
+        exportvol[/"Export volume (PVC)"/]:::secret
     end
 
     analyst["Researcher"]:::ext
     omoptools["External OMOP /<br/>OHDSI analytics tools"]:::ext
 
     src -->|"REST: create EHR / compositions"| ehrbase
-    ehrbase --> pg_ehr
-    openfhir -->|"reads compositions"| ehrbase
-    openfhir -->|"FHIR resources"| mongo
+    ehrbase -->|"db: ehrbase"| pg
+    openfhir <-->|"compositions ⇄ FHIR resources"| ehrbase
+    openfhir -->|"mappings / OPTs"| mongo
     eos -->|"reads compositions"| ehrbase
-    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ..."| pg_omop
+    eos -->|"PERSON, MEASUREMENT,<br/>OBSERVATION ... → db: eos_omop"| pg
+    ehrsuction -->|"reads compositions"| ehrbase
+    ehrsuction -->|"export files"| exportvol
     cohort -->|"AQL queries"| ehrbase
+    cohort -->|"db: numportal"| pg
+    cohort -->|"OIDC login"| keycloak
+    keycloak -->|"db: keycloak"| pg
     analyst -->|"define / run cohorts"| cohort
-    pg_omop -.->|"OMOP CDM (external use)"| omoptools
+    pg -.->|"eos_omop, external use"| omoptools
 
     classDef ext fill:#eeeeee,stroke:#777777,color:#222;
     classDef app fill:#e3effa,stroke:#3b6ea5,color:#222;
     classDef db  fill:#e6f2e6,stroke:#4f8a4f,color:#222;
+    classDef secret fill:#fadbd8,stroke:#b03a2e,color:#222;
 ```
 
-The Kubernetes deployment view and the full end-to-end data flow are in
-[docs/diagrams/](docs/diagrams/) (editable [`architecture.drawio`](docs/diagrams/architecture.drawio)
-plus a Mermaid source). See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions.
+Note the single PostgreSQL: EHRbase, Eos, the Cohort Explorer backend and Keycloak
+share **one** CNPG instance and differ only in the database they open. It is one
+volume and one failure domain for all four. openFHIR is a mapping engine, not a FHIR
+store: MongoDB holds its FhirConnect mappings and templates, not patient data.
+
+The Kubernetes deployment view and the full end-to-end data flow are
+in [docs/diagrams/](docs/diagrams/) (editable
+[`architecture.drawio`](docs/diagrams/architecture.drawio) plus a Mermaid source).
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions.
 
 ## Quick Start
 
@@ -126,7 +139,6 @@ bash scripts/port-forward.sh
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md)       | Component overview, data flows, and design decisions                       |
 | [SECRETS.md](docs/SECRETS.md)                 | Secret management with kubectl, Sealed Secrets, ESO, and SOPS              |
 | [VALUES.md](docs/VALUES.md)                   | Helm values reference                                                      |
-| [NEXT_STEPS.md](docs/NEXT_STEPS.md)           | Roadmap and future phases                                                  |
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md)       | Original requirements and architectural constraints                        |
 
 ## Project Structure

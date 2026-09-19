@@ -54,4 +54,3 @@ The catalogue below tracks the in-cluster components plus the external systems t
 - Multi-tenancy and federated learning
 - Service mesh integration (Istio/Linkerd)
 
-See [NEXT_STEPS.md](NEXT_STEPS.md) for the full roadmap.

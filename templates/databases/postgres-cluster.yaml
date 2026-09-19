@@ -42,16 +42,11 @@ spec:
 
   postgresql:
     parameters:
-      max_connections: "200"
-      shared_buffers: "256MB"
-      effective_cache_size: "1GB"
-      maintenance_work_mem: "64MB"
-      checkpoint_completion_target: "0.9"
-      wal_buffers: "16MB"
-      default_statistics_target: "100"
-      random_page_cost: "1.1"
-      effective_io_concurrency: "200"
-      work_mem: "1280kB"
+      {{- toYaml .Values.postgres.ehrbase.parameters | nindent 6 }}
+    {{- with .Values.postgres.ehrbase.sharedPreloadLibraries }}
+    shared_preload_libraries:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
 
   bootstrap:
     initdb:
@@ -97,8 +92,16 @@ spec:
   storage:
     size: {{ .Values.postgres.ehrbase.storage | default "10Gi" }}
 
+  {{- if .Values.postgres.ehrbase.walStorage }}
+  # Optional. A separate WAL volume isolates WAL I/O and keeps a WAL burst from
+  # filling PGDATA - worth having where volumes are cheap. Where the Cinder
+  # *volume count* quota is the binding constraint (20 per project here), it
+  # doubles the volumes a cluster needs for no functional gain: leave
+  # walStorage empty and pg_wal stays inside the data volume, as in a stock
+  # PostgreSQL layout.
   walStorage:
-    size: {{ .Values.postgres.ehrbase.walStorage | default "5Gi" }}
+    size: {{ .Values.postgres.ehrbase.walStorage }}
+  {{- end }}
 
   {{- if .Values.postgres.backup.enabled }}
   backup:
@@ -156,12 +159,7 @@ spec:
   {{- end }}
 
   resources:
-    requests:
-      memory: "512Mi"
-      cpu: "250m"
-    limits:
-      memory: "1Gi"
-      cpu: "500m"
+    {{- toYaml .Values.postgres.ehrbase.resources | nindent 4 }}
 {{- end }}
 
 {{- if .Values.postgres.eos.enabled }}

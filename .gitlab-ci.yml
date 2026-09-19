@@ -1,0 +1,92 @@
+# GitLab CI: build the self-hosted OHS images and push them to this project's
+# Container Registry. The cluster then pulls them with a read_registry deploy token.
+#
+# Images produced (tag = $IMAGE_TAG, default "ohs"):
+#   $CI_REGISTRY_IMAGE/cohort-explorer-backend:ohs
+#   $CI_REGISTRY_IMAGE/cohort-explorer-frontend:ohs
+#   $CI_REGISTRY_IMAGE/ehrsuction:ohs
+#   $CI_REGISTRY_IMAGE/openehrtool-backend:ohs
+#   $CI_REGISTRY_IMAGE/openehrtool-frontend:ohs
+#
+# Requirements on the GitLab instance:
+#   - Container Registry enabled for this project.
+#   - A runner that supports docker-in-docker (privileged). If runners are NOT
+#     privileged, switch the build to kaniko (ask and I'll provide that variant).
+#   - Runner egress to github.com (upstream repos are cloned) and Maven Central
+#     (cohort-explorer-backend compiles with Maven).
+#
+# Jobs are `when: manual` — trigger them from the Pipelines UI so nothing builds
+# unexpectedly. Re-run a single job to rebuild just that image.
+
+stages:
+  - preflight
+  - build
+
+variables:
+  IMAGE_TAG: "ohs"
+  # Baked into the openEHRTool frontend JS bundle at BUILD time. Use "localhost"
+  # for kubectl port-forward access; set to the ingress host for a public deploy.
+  OPENEHRTOOL_BACKEND_HOSTNAME: "localhost"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Cheap diagnostic — runs automatically on push. Verifies three things before we
+# spend time on the heavy image builds:
+#   1. Container Registry enabled on this instance ($CI_REGISTRY non-empty)
+#   2. Runner supports privileged docker-in-docker ($ docker info / build)
+#   3. Push to the project registry works (and egress to Docker Hub for alpine)
+# If this passes, the build jobs have the infrastructure they need.
+preflight:
+  stage: preflight
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - 'echo "CI_REGISTRY=$CI_REGISTRY"'
+    - 'echo "CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE"'
+    - 'if [ -z "$CI_REGISTRY" ]; then echo "!! Container Registry is DISABLED on this GitLab instance — CI push will not work."; exit 1; fi'
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - printf 'FROM alpine:3.20\nRUN echo ohs-preflight-ok\n' > Dockerfile.preflight
+    - docker build -f Dockerfile.preflight -t "$CI_REGISTRY_IMAGE/preflight:test" .
+    - docker push "$CI_REGISTRY_IMAGE/preflight:test"
+    - echo "Preflight OK — registry enabled, privileged dind works, push works."
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+.build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  before_script:
+    - apk add --no-cache bash git perl
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+      allow_failure: false
+
+cohort-explorer-backend:
+  extends: .build
+  script:
+    - bash scripts/build-images.sh --registry "$CI_REGISTRY_IMAGE" --tag "$IMAGE_TAG" --component cohort-explorer-backend
+
+cohort-explorer-frontend:
+  extends: .build
+  script:
+    - bash scripts/build-images.sh --registry "$CI_REGISTRY_IMAGE" --tag "$IMAGE_TAG" --component cohort-explorer-frontend
+
+ehrsuction:
+  extends: .build
+  script:
+    - bash scripts/build-images.sh --registry "$CI_REGISTRY_IMAGE" --tag "$IMAGE_TAG" --component ehrsuction
+
+openehrtool-backend:
+  extends: .build
+  script:
+    - bash scripts/build-images.sh --registry "$CI_REGISTRY_IMAGE" --tag "$IMAGE_TAG" --component openehrtool-backend
+
+openehrtool-frontend:
+  extends: .build
+  script:
+    - bash scripts/build-images.sh --registry "$CI_REGISTRY_IMAGE" --tag "$IMAGE_TAG" --component openehrtool-frontend

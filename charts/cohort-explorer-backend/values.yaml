@@ -53,6 +53,9 @@ config:
     schema: "num"
     username: "numportal"
     password: "CHANGE_ME_DATABASE_PASSWORD"  # Inject via Secret (ohs-credentials key: numportal-db-password)
+    # Verbindungspool. Hikaris Vorgabe von zehn reicht fuer einen
+    # Datenabruf ueber eine grosse Kohorte nicht aus.
+    maxPoolSize: 30
 
   # Keycloak / OAuth2 configuration (external prerequisite – deploy Keycloak separately)
   keycloak:
@@ -90,6 +93,9 @@ config:
   privacy:
     minHits: 30
     pseudonymitySecret: "CHANGE_ME_PSEUDONYMITY_SECRET"  # CHANGE_ME: random secret string
+    # Pseudonyme lokal bilden; ohne Treuhandstelle scheitert sonst
+    # jeder Datenabruf mit einer verschluckten ResourceNotFound.
+    localPseudonyms: true
 
   # Mail (optional – set enabled=false to skip mail integration)
   mail:
@@ -116,7 +122,7 @@ config:
 livenessProbe:
   enabled: true
   httpGet:
-    path: /actuator/health/liveness
+    path: /actuator/health  # num-portal only permits /actuator/health (GET); the /liveness+/readiness subpaths require auth (401)
     port: 8091
   initialDelaySeconds: 90
   periodSeconds: 15
@@ -126,7 +132,7 @@ livenessProbe:
 readinessProbe:
   enabled: true
   httpGet:
-    path: /actuator/health/readiness
+    path: /actuator/health  # num-portal only permits /actuator/health (GET); the /liveness+/readiness subpaths require auth (401)
     port: 8091
   initialDelaySeconds: 60
   periodSeconds: 10

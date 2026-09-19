@@ -154,7 +154,7 @@ keycloak:
 
 The `crr` Keycloak realm and both clients (`num-portal`, `num-portal-webapp`) are created
 automatically on first Keycloak startup - no manual admin console steps required.
-See [NEXT_STEPS.md](NEXT_STEPS.md) for full prerequisites and secret keys needed.
+See [SECRETS.md](SECRETS.md) for the secret keys needed.
 
 > **Important - frontend config URLs must be browser-accessible:** The `cohort-explorer-frontend.config.auth.baseUrl` and `cohort-explorer-frontend.config.api.baseUrl` values are fetched by the user's browser at runtime, not from inside the cluster. When port-forwarding, set them to `http://localhost:<port>` (e.g. `http://localhost:8083/auth` and `http://localhost:8084/num-portal`). See `values-local.yaml` for an example.
 
