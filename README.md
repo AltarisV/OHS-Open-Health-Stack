@@ -105,7 +105,21 @@ helm upgrade --install ohs . -n ohs -f values.yaml
 kubectl get pods -n ohs -w
 ```
 
-Local deployment:
+Local deployment (Docker Desktop) - one command from a fresh clone:
+
+```bash
+bash scripts/local-up.sh
+```
+
+It checks the prerequisites, installs both database operators, creates the namespace,
+generates a `.env` with random credentials, builds the images that have no published
+artefact, deploys the chart, waits for the workloads, and loads the Athena vocabulary if
+`vocab/` is present. Every phase skips work that is already done, so it is safe to re-run.
+Useful flags: `--skip-images`, `--rebuild-images`, `--skip-vocab`, `--full-vocab`,
+`-n NAME`, `-y`. It refuses any kube-context other than `docker-desktop` unless you pass
+`--context NAME`.
+
+The same steps by hand, for a cluster that is not Docker Desktop:
 
 ```bash
 cp .env.example .env
@@ -115,19 +129,35 @@ bash scripts/create-secret.sh
 
 # Build local images required by components without published images.
 # Docker Desktop shares the host Docker daemon - no registry push needed.
-OPENEHRTOOL_BACKEND_HOSTNAME=localhost \
-  bash scripts/build-images.sh --registry localhost:5000 --skip-push
+OPENEHRTOOL_BACKEND_HOSTNAME=localhost   bash scripts/build-images.sh --registry localhost:5000 --skip-push
 
 helm upgrade --install ohs . -n ohs -f values.yaml -f values-local.yaml --timeout 15m
 
 kubectl get pods -n ohs -w
 ```
 
-Once pods are running, forward all service ports to localhost with a single command:
+Once pods are running, forward all service ports to localhost:
 
 ```bash
 bash scripts/port-forward.sh
 ```
+
+### Browser test console
+
+`docs/test-ui/` walks the whole chain in a browser - create an EHR, upload the template,
+store a composition, run the Eos transformation into OMOP, get a Keycloak token, query the
+Cohort Explorer, convert the composition to FHIR. "Run all steps" executes the sequence and
+a live pipeline shows how far the data got.
+
+```bash
+bash scripts/port-forward.sh          # terminal 1
+python scripts/test-ui-proxy.py       # terminal 2 -> http://localhost:8888/test-ui/
+```
+
+Start it through that proxy, not a plain file server: the page is subject to CORS, and of
+these services only EHRbase and Keycloak send CORS headers. The proxy serves the page and
+forwards `/svc/<name>` to each port-forward, so everything shares one origin and CORS never
+applies. Behind the ingress this is moot - one origin already.
 
 ## Documentation
 
@@ -136,6 +166,7 @@ bash scripts/port-forward.sh
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Quick start, local setup, image builds, port-forwarding, common operations |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md)           | Full deployment guide and production notes                                 |
 | [VERIFICATION.md](docs/VERIFICATION.md)       | Health checks and end-to-end testing workflow                              |
+| [test-ui/](docs/test-ui/)                     | Browser console that walks the end-to-end chain (serve with `scripts/test-ui-proxy.py`) |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md)       | Component overview, data flows, and design decisions                       |
 | [SECRETS.md](docs/SECRETS.md)                 | Secret management with kubectl, Sealed Secrets, ESO, and SOPS              |
 | [VALUES.md](docs/VALUES.md)                   | Helm values reference                                                      |
@@ -149,10 +180,16 @@ ohs/
 ├── values.yaml                   # Base configuration
 ├── values-local.yaml             # Local Docker Desktop overrides
 ├── scripts/
+│   ├── local-up.sh               # One-command Docker Desktop bring-up (calls the rest)
 │   ├── create-secret.sh          # Creates required Kubernetes secrets from .env
 │   ├── build-images.sh           # Builds self-hosted component images from source
 │   ├── load-vocab.sh             # Loads OMOP Athena vocabularies into the eos_omop DB
-│   └── port-forward.sh           # Forwards all OHS service ports to localhost
+│   ├── port-forward.sh           # Forwards all OHS service ports to localhost
+│   ├── test-ui-proxy.py          # Serves docs/test-ui on one origin with the services
+│   ├── ehrbase-index.sh          # Index maintenance for the EHRbase database
+│   ├── aql-explain.sh            # Query plans and timings for stored AQL
+│   ├── aql-analyze.sh            # Analyses the AQL criteria catalogue
+│   └── seed-aql-criteria.sh      # Seeds the cohort builder's AQL criteria
 ├── charts/                       # Subcharts
 ├── templates/
 │   ├── ingress.yaml
@@ -203,7 +240,7 @@ Exported files are written to the `ohs-ehrsuction-export` PVC.
 * **Secrets are externalized**: copy `.env.example` to `.env`, fill in values, and run `scripts/create-secret.sh`.
 * **Local Docker Desktop uses `values-local.yaml`**: this profile reduces database replicas, disables selected probes, and uses locally built images.
 * **Eos runs on port `8081`**: probes and service `targetPort` are configured accordingly.
-* **Eos needs OMOP vocabularies**: load Athena vocabularies into the `eos_omop` DB once with `scripts/load-vocab.sh`, then restart the Eos pod. Without them, concept mapping is skipped.
+* **Eos needs OMOP vocabularies - a hard prerequisite, not an enhancement**: load them into the `eos_omop` DB once with `scripts/load-vocab.sh` (`local-up.sh` does it for you), then restart the Eos pod. Without them `POST /person` does not merely skip concept mapping, it fails outright with HTTP 500 `TransientPropertyValueException: Person.genderConcept` - the person mapping falls back to concept id `0`, and that row exists only once `CONCEPT.csv` is loaded. The five core tables suffice; the four large ones matter only for drug resolution.
 * **EHRsuction runs as a CronJob**: exports are written to a persistent volume and can be triggered manually or by schedule.
 * **openEHRTool-v2, EHRsuction and Cohort Explorer require local/self-hosted image builds**: use `scripts/build-images.sh`.
 * **Cohort Explorer and Keycloak are enabled in the local profile**: configure image coordinates, domains, and secrets before deploying on standard Kubernetes.

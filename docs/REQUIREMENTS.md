@@ -13,7 +13,7 @@ The catalogue below tracks the in-cluster components plus the external systems t
 | # | Component | Role | Status |
 |---|-----------|------|--------|
 | 1 | EHRbase | openEHR EHR store (ISO 13606) | Active |
-| 2 | openFHIR / FHIRconnect | FHIR R4 API & openEHR bridge | Active |
+| 2 | openFHIR / FHIRconnect | FHIRConnect mapping engine, openEHR ⇄ FHIR (no FHIR REST API) | Active |
 | 3 | Eos | ETL from openEHR to OMOP CDM | Active |
 | 4 | openEHRTool-v2 | Web UI for EHR editing (Vue3 + FastAPI) | Active |
 | 5 | EHRsuction | Data export tool (CronJob) | Active |
@@ -45,7 +45,8 @@ The catalogue below tracks the in-cluster components plus the external systems t
 3. No upstream repositories modified or forked
 4. No secrets appear in Git history
 5. New users can deploy in under 5 minutes following GETTING_STARTED.md
-6. All components expose health endpoints with liveness/readiness probes
+6. All components carry liveness/readiness probes. Not all expose an HTTP health endpoint:
+   Eos has neither `/health` nor an actuator, so its probe is a `tcpSocket` check on 8081.
 
 ## Out of Scope (Future Phases)
 

@@ -4,7 +4,8 @@
 
 OHS is a Kubernetes-native platform combining:
 - **EHRbase** - openEHR EHR storage (ISO 13606)
-- **openFHIR** - FHIR R4 API and openEHR bridge
+- **openFHIR** - FHIRConnect mapping engine (openEHR ⇄ FHIR R4). It maps compositions to
+  FHIR resources and back; it is not a FHIR REST server and serves no `/fhir/<Resource>` API
 - **Eos** - ETL from openEHR to OMOP CDM for research analytics
 - Additional stack components that are staged in the base profile until their deployment path is finalized (EHRsuction, CSV import)
 
@@ -33,31 +34,44 @@ ohs/
 ├── Chart.yaml              # Umbrella chart
 ├── values.yaml             # Master configuration
 ├── templates/
-│   ├── configmap.yaml
 │   ├── ingress.yaml
 │   ├── networkpolicy.yaml
 │   ├── poddisruptionbudget.yaml
 │   ├── rbac.yaml
 │   ├── secrets-reference.yaml
 │   ├── servicemonitor.yaml
+│   ├── keycloak-client-reconcile.yaml  # post-upgrade hook, dev profile only
+│   ├── ehrsuction/
+│   │   ├── cronjob.yaml            # scheduled export
+│   │   └── pvc.yaml                # export volume
 │   └── databases/
 │       ├── postgres-cluster.yaml   # CloudNativePG Cluster CRD
-│       └── mongodb-cluster.yaml    # MongoDB Community CRD
+│       ├── mongodb-cluster.yaml    # MongoDB Community CRD
+│       ├── numportal-schema-init.yaml  # post-install hook
+│       └── numportal-user-seed.yaml    # post-install hook
 └── charts/
-    ├── cloudnative-pg/     # PostgreSQL operator
-    ├── mongodb-operator/   # MongoDB operator
-    ├── ehrbase/            # EHR store
-    ├── openfhir/           # FHIR API
-    ├── eos/                # OMOP ETL
-     └── [staged charts]     # ehrsuction, csv-to-openeehr, better-platform
+    ├── cloudnative-pg/           # PostgreSQL operator (informational pin)
+    ├── mongodb-operator/         # MongoDB operator (informational pin)
+    ├── ehrbase/                  # openEHR store
+    ├── openfhir/                 # FHIRConnect mapping engine
+    ├── eos/                      # OMOP ETL
+    ├── keycloak/                 # identity provider, realm import
+    ├── cohort-explorer-backend/  # NUM num-portal API
+    ├── cohort-explorer-frontend/ # Angular SPA
+    ├── openehrtool-backend/      # openEHRTool API
+    ├── openehrtool-frontend/     # openEHRTool UI
+    └── openehrtool-redis/        # session/cache store for openEHRTool
 ```
+
+EHRsuction ships as templates in the umbrella chart rather than as a subchart. There is no
+`csv-to-openehr` or `better-platform` chart in this repository.
 
 ## Service Ports
 
 | Service | Port | Notes |
 |---------|------|-------|
-| EHRbase | 8080 | REST + FHIR APIs |
-| openFHIR | 8080 | FHIR R4 |
+| EHRbase | 8080 | openEHR REST API under the `/ehrbase` context path |
+| openFHIR | 8080 | FHIRConnect mapping engine, not a FHIR REST server |
 | Eos | **8081** | Spring Boot; `server.port: 8081` in application.yml |
 | PostgreSQL (CNPG) | 5432 | Service: `postgres-cluster-rw` (read-write endpoint) |
 | MongoDB | 27017 | Service: `mongodb-cluster-svc` |

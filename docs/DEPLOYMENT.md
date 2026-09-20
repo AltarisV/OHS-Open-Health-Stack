@@ -9,7 +9,11 @@ Before deploying OHS, ensure your Kubernetes cluster meets these requirements:
 - **Kubernetes**: 1.24 or later
 - **Helm**: 3.12 or later
 - **kubectl**: Configured and authenticated to your cluster
-- **Persistent Storage**: At least 100 GiB available (10 GiB EHRbase + 50 GiB Eos OMOP + buffers)
+- **Persistent Storage**: roughly 475 GiB with the shipped defaults - `postgres.ehrbase.storage` is
+  450Gi (one cluster shared by EHRbase, Eos, Keycloak and num-portal), MongoDB 20Gi, the EHRsuction
+  export volume 5Gi. Size it from your own composition count before deploying; the 450Gi default
+  comes from a measured migration of 4.7M compositions at ~64 KB each. `postgres.eos.storage` has
+  no effect while `postgres.eos.sharedCluster` is true.
 - **Ingress Controller**: Installed and configured (Nginx, Traefik, or cloud-native)
 - **TLS/Certificates**: (Optional but recommended for production)
   - If using cert-manager: install cert-manager v1.13+
@@ -210,8 +214,10 @@ helm template ohs . -f values-prod.yaml | kubeval --strict
 ### Step 8: Deploy with Helm
 
 ```bash
-# IMPORTANT: Always package first - vocab/ is 4.4 GB and will OOM-kill helm if
-# you pass "." directly. Packaging uses .helmignore to exclude vocab/.
+# Packaging gives you a versioned, reproducible artefact to install and archive.
+# It is not needed to keep vocab/ out: .helmignore lists vocab/, *.csv and *.zip,
+# and Helm applies it when loading a chart directory too - `helm template .` with
+# a 4.4 GB vocab/ present takes ~0.2 s and the tarball is ~180 KB either way.
 helm package . -d /tmp/
 
 # Dry-run first (simulates deployment without applying changes)
@@ -471,6 +477,35 @@ kubectl describe cloudnativepgcluster postgres-cluster -n ohs
 kubectl describe mongodbcommunity mongodb-cluster -n ohs
 ```
 
+### Problem: Portal login fails on a cluster that already had a realm
+
+Keycloak imports a realm **only into an empty database**. On any cluster whose `crr` realm
+predates the current chart, everything the import declares - the portal users and the
+client settings - never arrives, and the realm silently keeps whatever it was created with.
+Two symptoms follow: `helm upgrade` used to abort because the user-seed hook could not find
+the user it was meant to approve, and the password grant returns `unauthorized_client`
+because `directAccessGrantsEnabled` was never switched on.
+
+The chart now converges this itself, through three post-install/post-upgrade hooks:
+
+| Hook | Renders when | What it reconciles |
+| ---- | ------------ | ------------------ |
+| `numportal-schema-init` | always | creates the `num` schema before Flyway runs |
+| `numportal-user-seed` | `testUser` **or** `researchUser` enabled - so also on the cloud profile | creates the portal user with its realm roles if absent, then approves it in `num.user_details` |
+| `keycloak-client-reconcile` | `testUser` enabled only - the local profile | enables `directAccessGrantsEnabled` on `num-portal-webapp` |
+
+`keycloak-client-reconcile` is deliberately scoped to development: the password grant it
+enables bypasses the authorization-code flow the SPA uses, so it must not loosen a
+production realm. `values.yaml` and `values-cloud.yaml` leave `testUser` at the subchart
+default of `false`, and a render of either is byte-identical with and without that
+template. To inspect a stuck hook before its `hook-delete-policy` removes the Job:
+
+```bash
+kubectl get jobs -n ohs
+kubectl logs -n ohs job/ohs-numportal-user-seed
+kubectl logs -n ohs job/ohs-keycloak-client-reconcile
+```
+
 ### Problem: Authentication Failures
 
 ```bash
@@ -626,7 +661,7 @@ CloudNativePG creates the read-write service as `<cluster-name>-rw`, not `<clust
 
 ### Eos OMOP CDM Setup
 
-Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (`ddl-auto: update`) automatically creates entity-mapped tables. However, the OMOP **vocabulary tables** (CONCEPT, VOCABULARY, DOMAIN, etc.) are not created automatically and must be populated from [Athena](https://athena.ohdsi.org/) before mappings will function correctly.
+Eos bridges openEHR to the OMOP Common Data Model. On first startup, Hibernate (`ddl-auto: update`) automatically creates entity-mapped tables. However, the OMOP **vocabulary tables** (CONCEPT, VOCABULARY, DOMAIN, etc.) are not created automatically and must be populated from [Athena](https://athena.ohdsi.org/) before Eos can write anything at all. This is a hard prerequisite, not a quality setting: the person mapping falls back to concept id `0` whenever a composition carries no person data, and until `CONCEPT.csv` is loaded that row does not exist, so `POST /person` fails with HTTP 500 `TransientPropertyValueException: Person.genderConcept`. Loading `concept_class`, `domain`, `vocabulary`, `relationship` and `concept` is enough to get past it; `concept_ancestor`, `concept_relationship`, `concept_synonym` and `drug_strength` are another 4 GB and only matter for drug and ingredient resolution.
 
 Download the vocabulary CSVs from Athena into the `vocab/` directory, then stream them into the `eos_omop` database with the helper script (a one-time operation - the data persists in the CNPG PVC):
 

@@ -51,7 +51,7 @@ Key values to customize:
 ```yaml
 replicaCount: 1              # Eos typically runs as single instance
 
-image.tag: "0.0.62"          # Eos version (PIN_VERSION)
+image.tag: "latest"          # upstream publishes only 'latest'; pin by digest for production
 
 config:
   database:
@@ -83,20 +83,35 @@ helm install ohs . -f values.yaml
 # Check pod status
 kubectl get pods -l app=eos
 
-# Port-forward to test
-kubectl port-forward svc/ohs-eos 8080:8080
+# Port-forward to test - Eos listens on 8081, not 8080
+kubectl port-forward svc/ohs-eos 8082:8081
 
-# Test health endpoint
-curl -s http://localhost:8080/health | jq .
+# Eos exposes no health endpoint and no actuator. A GET on the POST-only /person
+# route returning 405 is what proves the service is up - hence the tcpSocket probe.
+curl -o /dev/null -w "%{http_code}
+" http://localhost:8082/person   # expect 405
 
 # Check OMOP tables created
-kubectl exec -it postgres-cluster-0 -- psql -U eos -d eos_omop -c "\dt eos_omop.*"
+kubectl exec -it postgres-cluster-1 -- psql -U postgres -d eos_omop -c "\dt"
 ```
 
 ## API Endpoints
 
-- **Health Check**: http://ohs-eos:8080/health
-- **ETL Status**: http://ohs-eos:8080/api/eos/status (if available)
+Both conversion routes take either **no body** (convert every EHR) or a JSON body listing
+EHR ids. Do not post `{}`: that selects the request-body overload, leaves `Ehrs.ehrIds`
+null and fails with `NullPointerException: Cannot read the array length`.
+
+- **`POST http://ohs-eos:8081/person`** - maps EHR subjects to OMOP `person`. Run first.
+- **`POST http://ohs-eos:8081/ehr`** - maps compositions to the clinical CDM tables.
+  Converts only EHRs that already have a `person` row.
+
+```bash
+curl -s -X POST http://localhost:8082/person                       # all EHRs
+curl -s -X POST -H "Content-Type: application/json"   -d '{"ehrIds":["<ehr_id>"]}' http://localhost:8082/ehr           # one EHR
+```
+
+Athena vocabularies must be loaded first, otherwise `/person` fails with HTTP 500
+`TransientPropertyValueException: Person.genderConcept` - see `scripts/load-vocab.sh`.
 
 ## OMOP Schema
 

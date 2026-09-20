@@ -15,10 +15,12 @@ the release is installed as `ohs` in namespace `ohs`; substitute your own if you
 6. [openFHIR](#openfhir)
 7. [Eos (OMOP Bridge)](#eos-omop-bridge)
 8. [openEHRTool-v2](#openehrtool-v2)
-9. [Placeholder Components](#placeholder-components)
-10. [Networking & Ingress](#networking--ingress)
-11. [RBAC & Security](#rbac--security)
-12. [Monitoring & Logging](#monitoring--logging)
+9. [Keycloak](#keycloak)
+10. [Cohort Explorer (NUM num-portal)](#cohort-explorer-num-num-portal)
+11. [Placeholder Components](#placeholder-components)
+12. [Networking & Ingress](#networking--ingress)
+13. [RBAC & Security](#rbac--security)
+14. [Monitoring & Logging](#monitoring--logging)
 
 ---
 
@@ -121,17 +123,43 @@ postgres:
                                     # Default: true
     
     storage: string                 # Persistent volume size for data
-                                    # Default: "10Gi"
-                                    # CHANGE_ME: adjust for expected EHR data volume
-                                    # (Rule of thumb: 100MB - 1GB per patient, 1000 patients = 100-1000GB)
+                                    # Default: "450Gi"
+                                    # Sized from a measured migration, not a guess:
+                                    # 4.7M compositions occupied 298 GB (~64 KB each,
+                                    # canonical JSON plus the source row in feeder_audit).
+                                    # The remainder is headroom for VACUUM and reindex.
+                                    # One volume holds data and WAL - see walStorage.
     
-    instances: integer              # Number of PostgreSQL replicas (HA)
-                                    # Default: 3 (production minimum)
-                                    # Development: 1-2 acceptable
+    instances: integer              # Number of PostgreSQL replicas
+                                    # Default: 1
+                                    # Not an HA recommendation: three instances need six
+                                    # PVCs, and the reference environment's Cinder quota
+                                    # caps volume COUNT at 20. Raising this needs volume
+                                    # count, not more storage.
     
-    walStorage: string              # Write-Ahead Log (WAL) storage size
-                                    # Default: "5Gi"
-                                    # Should be ~50% of main storage
+    walStorage: string              # Separate WAL volume; empty means pg_wal stays inside
+                                    # the data volume, as in a stock PostgreSQL layout.
+                                    # Default: "" (no separate volume)
+                                    # A separate volume isolates WAL I/O and is worth
+                                    # having where volumes are cheap.
+    
+    resources: object               # Requests and limits for the instance pod
+                                    # Default: requests 5Gi/500m, limits 12Gi/2000m
+                                    # The request must be >= shared_buffers or the CNPG
+                                    # admission webhook rejects the cluster.
+    
+    parameters: object              # postgresql.conf settings, passed through verbatim
+                                    # Default: shared_buffers 4GB, effective_cache_size 9GB,
+                                    # work_mem 16MB, max_connections 200, and others.
+                                    # work_mem applies PER sort/hash step and connection,
+                                    # so raising it scales with concurrency, not per query.
+                                    # Changing shared_buffers restarts the instance.
+    
+    sharedPreloadLibraries: list    # e.g. ["pg_stat_statements"] to measure query cost
+                                    # Default: [] (disabled)
+                                    # Changing this restarts the instance, and this single
+                                    # cluster serves EHRbase, num-portal, Keycloak and Eos -
+                                    # roll it out together with shared_buffers, not separately.
     
     backupRetention: string         # How long to retain backups
                                     # Default: "30d" (30 days)
@@ -668,6 +696,236 @@ Required secret: `ohs-credentials/openehrtool-jwt-secret` (set `OPENEHRTOOL_JWT_
 
 ---
 
+## Keycloak
+
+### `keycloak`
+
+Identity provider for the Cohort Explorer. The chart imports a realm named `crr` containing
+the two clients the portal needs; nothing else in the stack authenticates against it
+(EHRbase uses basic auth, Eos and openFHIR are unauthenticated in-cluster).
+
+```yaml
+keycloak:
+  enabled: boolean                  # Default: true
+
+  image:
+    repository: string              # Default: "quay.io/keycloak/keycloak"
+    tag: string                     # Default: "24.0"  (PIN_VERSION)
+
+  service:
+    port: integer                   # Default: 8080
+    targetPort: integer             # Default: 8080
+
+  ingress:
+    enabled: boolean                # Default: true
+    path: string                    # Default: "/auth"
+                                    # Must match the path inside config.hostnameUrl -
+                                    # Keycloak builds absolute URLs from it and a mismatch
+                                    # sends users to a login page that 404s.
+
+  resources:                        # Default: requests 250m/512Mi, limits 1000m/1Gi
+                                    # Watch this limit. kc.sh runs a Quarkus augmentation
+                                    # build on every start and the JVM sizes its heap at
+                                    # MaxRAMPercentage=70, so a small limit is exceeded
+                                    # during startup, not under load: at 2Gi the container
+                                    # was OOMKilled (exit 137) before serving a request,
+                                    # and the local profile raises it to 4Gi. Everything
+                                    # downstream then hangs in wait-for-keycloak.
+
+  config:
+    startMode: string               # "start" (production) or "start-dev"
+                                    # Default: "start"; the local profile uses start-dev
+    adminUser: string               # Default: "admin"
+    adminPassword: string           # Overridden by ohs-credentials/keycloak-admin-password
+
+    database:
+      host: string                  # Default: "postgres-cluster-rw.ohs.svc.cluster.local"
+      port: integer                 # Default: 5432
+      name: string                  # Default: "keycloak"
+      username: string              # Default: "keycloak"
+                                    # The role is managed by CNPG; its password comes from
+                                    # the postgres-keycloak-user-secret basic-auth secret.
+
+    hostname: string                # External hostname WITHOUT path
+                                    # CHANGE_ME: e.g. "ohs.example.org"
+    hostnameUrl: string             # Full external URL INCLUDING the path
+                                    # CHANGE_ME: e.g. "https://ohs.example.org/auth"
+    httpEnabled: boolean            # Default: true; set false when TLS terminates at Keycloak
+    proxyHeaders: string            # Default: "xforwarded"
+```
+
+### Realm import and its one hard limitation
+
+```yaml
+keycloak:
+  config:
+    realmImport:
+      enabled: boolean              # Default: true
+
+    testUser:
+      enabled: boolean              # Default: false
+                                    # Creates testuser / test123 with the five portal roles.
+                                    # Local development only - never enable in production.
+
+    researchUser:
+      enabled: boolean              # Default: false (values-cloud.yaml enables it)
+      email: string                 # Default: "research@ohs.local"
+                                    # Password from ohs-credentials/keycloak-research-password;
+                                    # empty means Keycloak assigns a random one that has to be
+                                    # reset in the admin console.
+```
+
+**Keycloak imports a realm only into an empty database.** Once the `crr` realm exists,
+everything declared here - users, client flags - is ignored on subsequent upgrades, and the
+realm silently keeps whatever it was created with. That is why the chart ships reconciling
+hooks rather than relying on the import alone:
+
+| Hook | Renders when | Reconciles |
+|------|--------------|------------|
+| `numportal-user-seed` | `testUser` **or** `researchUser` enabled | creates the user with its realm roles if absent, then approves it in `num.user_details` |
+| `keycloak-client-reconcile` | `testUser` enabled only | sets `directAccessGrantsEnabled` on `num-portal-webapp` |
+
+`keycloak-client-reconcile` is scoped to development on purpose: the password grant it
+enables bypasses the authorization-code flow the SPA uses, so it must not loosen a
+production realm. A render of `values.yaml` or `values-cloud.yaml` is byte-identical with
+and without that template.
+
+---
+
+## Cohort Explorer (NUM num-portal)
+
+Two components: a Spring Boot API and an Angular SPA. Neither has a published image that
+suits this chart - build both with `scripts/build-images.sh`.
+
+The Cohort Explorer queries **EHRbase via AQL**. It does not read the OMOP CDM, so a cohort
+result does not depend on the Eos transformation having run.
+
+### `cohort-explorer-backend`
+
+```yaml
+cohort-explorer-backend:
+  enabled: boolean                  # Default: true
+  replicaCount: integer             # Default: 1
+
+  image:
+    repository: string              # Default: "ghcr.io/highmed/cohort-explorer-backend"
+    tag: string                     # Default: "develop"
+                                    # Pin it. The backend runs Flyway migrations at startup,
+                                    # so rebuilding from a moving develop branch can alter
+                                    # the numportal schema irreversibly. build-images.sh
+                                    # honours COHORT_EXPLORER_BACKEND_REF.
+
+  service:
+    port: integer                   # Default: 8090 (management on 8091)
+
+  ingress:
+    path: string                    # Default: "/num-portal"
+                                    # The gateway rewrites this prefix to "/". Controllers
+                                    # are served at the root, so a port-forward needs no
+                                    # prefix: GET localhost:8084/organization, not
+                                    # /num-portal/organization.
+
+  resources:                        # Default: requests 500m/512Mi, limits 2000m/2Gi
+
+  config:
+    database:
+      host: string                  # Default: "postgres-cluster-rw.ohs.svc.cluster.local"
+      name: string                  # Default: "numportal"
+      schema: string                # Default: "num"
+      username: string              # Default: "numportal" (CNPG-managed role)
+      maxPoolSize: integer          # Default: 30
+                                    # A data retrieval holds its connection for its whole
+                                    # run, so Hikari's default of 10 lets a handful of
+                                    # concurrent retrievals starve the rest of the portal -
+                                    # navigation and tiles included. Postgres allows 200.
+
+    keycloak:
+      url: string                   # Default: "http://ohs-keycloak.ohs.svc.cluster.local:8080/auth"
+      realm: string                 # Default: "crr"
+      clientId: string              # Default: "num-portal" (confidential, service account)
+      clientSecret: string          # Overridden by ohs-credentials/numportal-keycloak-secret
+
+    ehrbase:
+      restApiUrl: string            # Default: ".../ehrbase/"  - trailing slash included
+      username: string              # Default: "ehrbase_user"
+      adminUsername: string         # Default: "ehrbase-admin"
+                                    # Both passwords come from ohs-credentials.
+
+    numUrl: string                  # External base URL of the portal (CHANGE_ME)
+    corsAllowedOrigins: string      # Origin allowed to call this API (CHANGE_ME)
+                                    # Must list the frontend's origin exactly. Behind the
+                                    # ingress both share one origin and this barely matters;
+                                    # with port-forwards they do not, and the browser blocks
+                                    # the call before the API ever sees it.
+
+    privacy:
+      minHits: integer              # Default: 30
+                                    # Smallest cohort size the portal will report, so a
+                                    # result cannot identify individuals.
+      pseudonymitySecret: string    # Overridden by ohs-credentials/numportal-pseudonymity-secret
+      localPseudonyms: boolean      # Default: true
+                                    # Derive pseudonyms locally instead of calling a trusted
+                                    # third party. With false and no such service reachable,
+                                    # every data retrieval fails silently: the swallowed
+                                    # ResourceNotFound surfaces only as an empty table.
+
+    mail:
+      enabled: boolean              # Default: false; host/port/username/password/from
+    virusScan:
+      enabled: boolean              # Default: false - ClamAV host/port for attachments
+
+    features:                       # Feature switches, all strings ("true"/"false")
+      searchByManager: string       # Default: "false"
+      handleUser: string            # Default: "true"
+      workingWithAql: string        # Default: "true"
+      cohortExplorer: string        # Default: "true"
+      handleContent: string         # Default: "true"
+      handleUserMessages: string    # Default: "true"
+      handleOrganization: string    # Default: "true"
+      handleProject: string         # Default: "true"
+```
+
+The cohort builder needs AQL criteria before it can express anything. Seed the catalogue
+with `scripts/seed-aql-criteria.sh` (definitions in `scripts/aql-criteria.json`).
+
+### `cohort-explorer-frontend`
+
+```yaml
+cohort-explorer-frontend:
+  enabled: boolean                  # Default: true
+
+  image:
+    repository: string              # Default: "ghcr.io/highmed/cohort-explorer-frontend"
+    tag: string                     # Default: "develop"
+
+  service:
+    port: integer                   # Default: 80
+    targetPort: integer             # Default: 8080
+                                    # build-images.sh switches the runtime stage to
+                                    # nginx-unprivileged, which runs as uid 101 and cannot
+                                    # bind a port below 1024. An image built elsewhere may
+                                    # still listen on 80 - then this must say 80, or the
+                                    # Service points at a port nothing is listening on.
+
+  resources:                        # Default: requests 100m/128Mi, limits 500m/256Mi
+
+  config:
+    env:
+      name: string                  # Default: "production"
+    api:
+      baseUrl: string               # External URL of the backend (CHANGE_ME)
+    auth:
+      baseUrl: string               # External Keycloak URL including /auth (CHANGE_ME)
+      realm: string                 # Default: "crr"
+      clientId: string              # Default: "num-portal-webapp" (public SPA client)
+```
+
+These three URLs are **baked into the served configuration**, so they must be the addresses
+the *browser* can reach, not in-cluster service names. Behind the ingress that is the
+external hostname; with port-forwards it is `http://localhost:<port>`.
+
+---
+
 ## Placeholder Components
 
 ### Remaining Staged Components
@@ -844,9 +1102,9 @@ Scale replicas, storage, and resources with the environment. Rough guidance:
 
 | Setting | Development | Staging | Production |
 |---------|-------------|---------|------------|
-| `postgres.ehrbase.instances` | 1 | 2 | 3 |
-| `postgres.ehrbase.storage` | 10Gi | 20Gi | 100Gi |
-| `postgres.eos.storage` | 20Gi | 50Gi | 200Gi |
+| `postgres.ehrbase.instances` | 1 | 2 | 3 where volume count allows (the shipped default is 1) |
+| `postgres.ehrbase.storage` | 10Gi | 50Gi | 450Gi (shipped default, ~64 KB per composition) |
+| `postgres.eos.storage` | — | — | no effect while `postgres.eos.sharedCluster` is true |
 | `mongodb.openfhir.replicas` | 1 | 2 | 3 |
 | app `replicaCount` (ehrbase/openfhir/eos) | 1 | 2 | 3 |
 | app resource requests | 100m / 512Mi | 500m / 1Gi | 1000m / 2Gi |

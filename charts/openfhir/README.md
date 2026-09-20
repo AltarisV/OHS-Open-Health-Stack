@@ -1,16 +1,18 @@
 # openFHIR Helm Chart
 
-openFHIR is a FHIR server that provides bidirectional mapping between openEHR (EHRbase) and FHIR resources.
+openFHIR is a FHIRConnect **mapping engine** that converts between openEHR compositions and
+FHIR resources in both directions. It is not a FHIR server: it stores no resources and serves
+no `/fhir/<Resource>` REST API. Conversion is driven by a FhirConnect model and context plus
+the matching operational template, all uploaded to the engine first.
 
 ## Overview
 
 This subchart deploys openFHIR within the Open Health Stack Kubernetes platform.
 
 **Features:**
-- FHIR STU3, R4, R4B, R5 support
-- Two-way transformation: EHR ↔ FHIR
-- MongoDB backend
-- RESTful FHIR API
+- FHIR STU3, R4 and R4B (the versions `openfhir.config.fhir.versions` enables)
+- Two-way transformation: openEHR composition ⇄ FHIR resource
+- MongoDB backend for templates, models and contexts
 - Integration with EHRbase
 
 ## Prerequisites
@@ -62,9 +64,17 @@ helm install ohs . -f values.yaml
 
 ## API Endpoints
 
-- **FHIR Base**: http://ohs-openfhir:8080/fhir/
-- **Patient Resource**: http://ohs-openfhir:8080/fhir/Patient
-- **Health Check**: http://ohs-openfhir:8080/health
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | liveness; returns `UP` as plain text |
+| `/opt` | GET, POST | list or upload operational templates |
+| `/fc/model` | GET, POST | list or upload FhirConnect model mappings |
+| `/fc/context` | GET, POST | list or upload FhirConnect contexts |
+| `/openfhir/tofhir?templateId=<id>` | POST | composition → FHIR Bundle |
+| `/openfhir/toopenehr?templateId=<id>` | POST | FHIR resource → composition |
+
+Conversion needs the template's OPT, model and context loaded first; without them the engine
+answers `400` with `Couldn't find a Context Mapper for the inbound request`.
 
 ## Further Reference
 

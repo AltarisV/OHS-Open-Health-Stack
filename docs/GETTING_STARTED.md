@@ -145,7 +145,7 @@ kubectl get pods -n ohs
 kubectl logs -l app=ehrbase -n ohs --tail=50
 kubectl describe pod <pod-name> -n ohs
 
-# Apply config changes (use packaged tarball to avoid loading large data files)
+# Apply config changes (packaging is optional - .helmignore already keeps vocab/ out)
 helm package . -d /tmp/ && helm upgrade ohs /tmp/ohs-0.1.0.tgz -f values.yaml -n ohs
 kubectl rollout status deployment/ohs-ehrbase -n ohs
 

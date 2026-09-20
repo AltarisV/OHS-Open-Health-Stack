@@ -71,15 +71,22 @@ kubectl get pods -l app=ehrbase
 # Port-forward to test
 kubectl port-forward svc/ohs-ehrbase 8080:8080
 
-# Test health endpoint
-curl -s http://localhost:8080/health | jq .
+# Test health endpoint - everything sits behind the /ehrbase context path
+curl -s http://localhost:8080/ehrbase/management/health | jq .
 ```
 
 ## API Documentation
 
-- **REST API**: http://ohs-ehrbase:8080/rest/openehr/v1/
-- **FHIR API**: http://ohs-ehrbase:8080/fhir/
-- **Health check**: http://ohs-ehrbase:8080/health
+All paths sit behind the `/ehrbase` context path (`ingress.path` in `values.yaml`).
+
+- **openEHR REST API**: http://ohs-ehrbase:8080/ehrbase/rest/openehr/v1/ (basic auth)
+- **Swagger UI**: http://ohs-ehrbase:8080/ehrbase/swagger-ui/index.html (basic auth)
+- **Health check**: http://ohs-ehrbase:8080/ehrbase/management/health
+- **Readiness**: http://ohs-ehrbase:8080/ehrbase/management/health/readiness - the path the
+  chart's readiness probe uses; it touches the database, so it reports more than liveness
+
+EHRbase serves no FHIR API. Mapping openEHR to FHIR is openFHIR's job - see
+`charts/openfhir/README.md`.
 
 ## Further Reference
 
