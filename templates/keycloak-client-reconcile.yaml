@@ -1,0 +1,116 @@
+{{- if and .Values.keycloak.enabled (dig "testUser" "enabled" false .Values.keycloak.config) }}
+---
+# Reconciles client settings that the realm import cannot reach on an existing realm.
+#
+# The import populates a realm only when the Keycloak database is EMPTY, so a realm
+# created by an older chart keeps whatever it was created with: configmap-realm.yaml
+# declaring directAccessGrantsEnabled: true has no effect there. The browser test
+# console (docs/test-ui) uses the password grant and fails with unauthorized_client
+# until the live client matches what the chart says it should be.
+#
+# Scope is deliberately narrow - keycloak.config.testUser.enabled, i.e. the local
+# development profile. The password grant bypasses the authorization-code flow the
+# SPA normally uses, so this must not silently loosen a production realm. values.yaml
+# and values-cloud.yaml leave testUser at the subchart default (false), so nothing is
+# rendered for them; values-cloud.yaml enables researchUser only, which does not
+# trigger this Job.
+#
+# Why a separate Job instead of a step inside numportal-user-seed: changing a client
+# requires PUT /admin/realms/crr/clients/{id} - the admin API has no POST equivalent -
+# and that Job runs on postgres:15-alpine, whose BusyBox wget speaks only GET and
+# --post-data, with no curl beside it. The Keycloak image already in the cluster
+# carries kcadm.sh, which does the whole exchange.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-keycloak-client-reconcile
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    # Runs before numportal-user-seed (weight 10): that Job authenticates against
+    # the same realm, so settling client config first keeps the ordering obvious.
+    helm.sh/hook-weight: "8"
+    helm.sh/hook-timeout: "600s"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    app: keycloak-client-reconcile
+    release: {{ .Release.Name }}
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: keycloak-client-reconcile
+        release: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: reconcile
+          image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ dig "image" "pullPolicy" "IfNotPresent" .Values.keycloak }}
+          env:
+            - name: KC_URL
+              value: "http://{{ .Release.Name }}-keycloak:8080/auth"
+            - name: KC_ADMIN_USER
+              value: "admin"
+            - name: KC_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ohs-credentials
+                  key: keycloak-admin-password
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              K=/opt/keycloak/bin/kcadm.sh
+
+              # The readiness check is the login itself. This image has no curl,
+              # no wget and no python3, so there is nothing to poll an HTTP
+              # endpoint with - and a successful login proves more than a 200 on
+              # the discovery document anyway: the admin API answers and the
+              # credentials work.
+              echo "==> Waiting for the Keycloak admin API..."
+              READY=""
+              for i in $(seq 1 60); do
+                if $K config credentials --server "$KC_URL" --realm master \
+                     --user "$KC_ADMIN_USER" --password "$KC_ADMIN_PASSWORD" >/dev/null 2>&1; then
+                  READY=1
+                  break
+                fi
+                sleep 5
+              done
+              if [ -z "$READY" ]; then
+                echo "ERROR: no admin login against ${KC_URL} within 5 minutes" >&2
+                exit 1
+              fi
+              echo "    Logged in."
+
+              CLIENT_ID=$($K get clients -r crr -q clientId=num-portal-webapp \
+                            --fields id --format csv --noquotes 2>/dev/null | head -1)
+              if [ -z "$CLIENT_ID" ]; then
+                echo "ERROR: client num-portal-webapp not found in realm crr." >&2
+                echo "  The realm import creates it; check the keycloak pod's realm-config init container." >&2
+                exit 1
+              fi
+
+              CURRENT=$($K get "clients/${CLIENT_ID}" -r crr \
+                          --fields directAccessGrantsEnabled --format csv --noquotes 2>/dev/null | head -1)
+              if [ "$CURRENT" = "true" ]; then
+                echo "==> num-portal-webapp: directAccessGrantsEnabled already true, nothing to do."
+              else
+                echo "==> num-portal-webapp: enabling directAccessGrantsEnabled (was '${CURRENT}')..."
+                $K update "clients/${CLIENT_ID}" -r crr -s directAccessGrantsEnabled=true
+                echo "    Done - the password grant works now."
+              fi
+
+              echo "==> client reconcile complete."
+{{- end }}

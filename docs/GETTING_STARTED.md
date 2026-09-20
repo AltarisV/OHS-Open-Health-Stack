@@ -5,7 +5,34 @@
 - Standard Kubernetes cluster: target deployment mode.
 - Docker Desktop Kubernetes: local development, using `values-local.yaml`.
 
-## Quick Start
+## Quick Start - Docker Desktop
+
+One command from a fresh clone. It runs the prerequisite checks, installs the two
+database operators, creates the namespace, generates a `.env` with random credentials,
+builds the self-hosted images, installs the Helm release, waits for the workloads and
+loads the Athena vocabulary if `vocab/` is present:
+
+```bash
+bash scripts/local-up.sh
+```
+
+Re-running is safe - every phase checks whether its work is already done and skips it.
+Useful flags: `--skip-images` (images already built), `--rebuild-images`, `--skip-vocab`,
+`--full-vocab`, `-n NAME` for another namespace, `-y` to skip the confirmation.
+It refuses to run against a kube-context other than `docker-desktop` unless you pass
+`--context NAME` - it deploys into whatever the context points at and will not guess.
+
+Then:
+
+```bash
+bash scripts/port-forward.sh          # forward every service
+python scripts/test-ui-proxy.py       # browser console: http://localhost:8888/test-ui/
+```
+
+## Quick Start - manual
+
+The individual steps `local-up.sh` performs, for a non-Docker-Desktop cluster or when
+you want to run them one at a time:
 
 ```bash
 # 1. Install operators (one-time cluster setup)
@@ -68,14 +95,45 @@ kubectl port-forward svc/ohs-cohort-explorer-frontend 8085:80 -n ohs
 | Service | URL | Notes |
 |---------|-----|-------|
 | EHRbase | http://localhost:8080/ehrbase/rest/openehr/v1/ | Basic auth: ehrbase_user / your password |
-| EHRbase Swagger | http://localhost:8080/swagger-ui/ | |
+| EHRbase Swagger | http://localhost:8080/ehrbase/swagger-ui/index.html | Behind the `/ehrbase` context path, and requires the same basic auth |
 | openFHIR | http://localhost:8081/health | FHIRConnect mapping engine (no FHIR REST API) |
-| Eos | http://localhost:8082/actuator/health | Spring Boot actuator |
+| Eos | http://localhost:8082/person | No actuator and no health endpoint are exposed. A GET returns `405` (the route is POST-only), which is the proof that Eos is up - hence the tcpSocket liveness probe in the chart |
 | Keycloak | http://localhost:8083/auth | Admin console: /auth/admin |
 | Cohort Explorer API | http://localhost:8084/ | Requires Keycloak |
 | Cohort Explorer UI | http://localhost:8085/ | Angular SPA |
 
 See [VERIFICATION.md](VERIFICATION.md) for end-to-end testing steps.
+
+---
+
+## Browser Test Console
+
+`docs/test-ui/index.html` walks the whole chain in a browser - create an EHR, upload the
+operational template, store a composition, run the Eos transformation, get a Keycloak
+token, query the Cohort Explorer, check openFHIR. Start it with its proxy, not with a
+plain file server:
+
+```bash
+bash scripts/port-forward.sh          # terminal 1
+python scripts/test-ui-proxy.py       # terminal 2
+# -> http://localhost:8888/test-ui/
+```
+
+The proxy serves the page and forwards `/svc/<name>` to each port-forward, so the console
+and the services share one origin. That is not a convenience: a page is subject to CORS,
+and of these services only EHRbase and Keycloak send CORS headers at all - Eos, openFHIR
+and the Cohort Explorer backend send none, so those steps cannot read a response when the
+page is served from a different origin. Eos is the one to watch out for: its POST is a
+"simple request", so the conversion really runs and only the response is withheld from the
+page, which looks like a step that failed and changed nothing.
+
+Pass `--map eos=http://localhost:9082` (repeatable) if your port-forwards use other ports.
+Behind the ingress/gateway none of this applies - everything is already one origin.
+
+The Keycloak step uses the password grant against `num-portal-webapp`, which needs
+"Direct access grants" enabled on that client. The chart's realm import sets it, but the
+import only applies to an empty database, so a realm created by an older chart version can
+still have it switched off - the step then fails with `unauthorized_client`.
 
 ---
 

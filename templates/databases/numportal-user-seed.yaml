@@ -1,10 +1,23 @@
 {{- $users := list }}
-{{- if dig "testUser" "enabled" false .Values.keycloak.config }}{{- $users = append $users "testuser" }}{{- end }}
-{{- if dig "researchUser" "enabled" false .Values.keycloak.config }}{{- $users = append $users "research" }}{{- end }}
+{{- $attrs := dict }}
+{{- if dig "testUser" "enabled" false .Values.keycloak.config }}
+{{- $users = append $users "testuser" }}
+{{- $_ := set $attrs "testuser" (dict "email" "testuser@test.local" "first" "Test" "last" "User" "roles" "SUPER_ADMIN STUDY_COORDINATOR RESEARCHER CRITERIA_EDITOR STUDY_APPROVER") }}
+{{- end }}
+{{- if dig "researchUser" "enabled" false .Values.keycloak.config }}
+{{- $users = append $users "research" }}
+{{- $_ := set $attrs "research" (dict "email" (dig "researchUser" "email" "research@ohs.local" .Values.keycloak.config) "first" "Research" "last" "User" "roles" "SUPER_ADMIN ORGANIZATION_ADMIN STUDY_COORDINATOR STUDY_APPROVER RESEARCHER CRITERIA_EDITOR CONTENT_ADMIN") }}
+{{- end }}
 {{- if and $users (index .Values "cohort-explorer-backend" "enabled") }}
 ---
-# Post-install/-upgrade Job that approves the users created by the realm import
-# (keycloak.config.testUser, keycloak.config.researchUser) in num.user_details.
+# Post-install/-upgrade Job that makes sure the portal users (keycloak.config.testUser,
+# keycloak.config.researchUser) exist in Keycloak AND are approved in num.user_details.
+#
+# It creates a missing user rather than failing on it. The realm import populates
+# users only when the Keycloak database is empty, so on every cluster whose realm
+# predates the current chart - the normal case for a long-lived environment - the
+# user is simply absent and this Job used to abort, taking the whole helm upgrade
+# with it. Creating it here converges the realm no matter how old it is.
 # NUMportal does not auto-create users on first authenticated request - the row must
 # exist and be approved before any authenticated API call succeeds. Existing rows are
 # left alone (ON CONFLICT DO NOTHING), so approvals changed in the portal persist.
@@ -62,6 +75,14 @@ spec:
                 secretKeyRef:
                   name: ohs-credentials
                   key: keycloak-admin-password
+            # Only read when the research user has to be created. Optional on
+            # purpose: an empty value makes Keycloak assign a random password.
+            - name: KC_RESEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ohs-credentials
+                  key: keycloak-research-password
+                  optional: true
           command:
             - /bin/sh
             - -c
@@ -101,15 +122,77 @@ spec:
               fi
               echo "    Admin token obtained."
 
+              KC_ADMIN_API="${KC_URL}/auth/admin/realms/crr"
+
+              lookup_user() {
+                wget -q -O - --header="Authorization: Bearer ${ADMIN_TOKEN}" \
+                  "${KC_ADMIN_API}/users?username=$1&exact=true" 2>/dev/null \
+                  | tr -d '\n\r' | grep -o '"id":"[0-9a-f-]*"' | head -1 | cut -d'"' -f4
+              }
+
               for U in {{ join " " $users }}; do
                 echo "==> Fetching ${U} UUID from Keycloak crr realm..."
-                USER_JSON=$(wget -q -O - \
-                  --header="Authorization: Bearer ${ADMIN_TOKEN}" \
-                  "${KC_URL}/auth/admin/realms/crr/users?username=${U}&exact=true")
-                USER_ID=$(echo "$USER_JSON" | tr -d '\n\r' | grep -o '"id":"[0-9a-f-]*"' | head -1 | cut -d'"' -f4)
+                USER_ID=$(lookup_user "$U")
+
                 if [ -z "$USER_ID" ]; then
-                  echo "ERROR: ${U} not found in Keycloak crr realm - the realm import creates it only on an empty database" >&2
-                  exit 1
+                  # Attributes mirror the "users" block of the realm import in
+                  # charts/keycloak/templates/configmap-realm.yaml - keep the two
+                  # in step when the roles there change.
+                  case "$U" in
+{{- range $name, $a := $attrs }}
+                    {{ $name }})
+                      U_EMAIL="{{ $a.email }}"; U_FIRST="{{ $a.first }}"
+                      U_LAST="{{ $a.last }}"; U_ROLES="{{ $a.roles }}"
+                      ;;
+{{- end }}
+                    *) echo "ERROR: no attributes known for user ${U}" >&2; exit 1 ;;
+                  esac
+
+                  # The password rides along in the creation call. This image is
+                  # postgres:15-alpine, whose wget is BusyBox: it speaks GET and
+                  # --post-data and nothing else, so the usual PUT to
+                  # /users/{id}/reset-password is simply not available here, and
+                  # there is no curl either. Keycloak accepts a credentials array
+                  # on user creation, which needs no second request.
+                  # An empty password is deliberate for the research user: Keycloak
+                  # then assigns a random one, to be reset in the admin console.
+                  U_PASS=""
+                  [ "$U" = "testuser" ] && U_PASS="test123"
+                  [ "$U" = "research" ] && U_PASS="${KC_RESEARCH_PASSWORD:-}"
+                  U_CRED=""
+                  if [ -n "$U_PASS" ]; then
+                    U_CRED=",\"credentials\":[{\"type\":\"password\",\"value\":\"${U_PASS}\",\"temporary\":false}]"
+                  fi
+
+                  echo "    ${U} absent (realm predates this chart) - creating it..."
+                  wget -q -O /dev/null --header="Authorization: Bearer ${ADMIN_TOKEN}" \
+                    --header="Content-Type: application/json" \
+                    --post-data="{\"username\":\"${U}\",\"enabled\":true,\"emailVerified\":true,\"email\":\"${U_EMAIL}\",\"firstName\":\"${U_FIRST}\",\"lastName\":\"${U_LAST}\"${U_CRED}}" \
+                    "${KC_ADMIN_API}/users" || true
+
+                  USER_ID=$(lookup_user "$U")
+                  if [ -z "$USER_ID" ]; then
+                    echo "ERROR: could not create ${U} in the crr realm" >&2
+                    exit 1
+                  fi
+
+                  # Roles carry the portal's authorisation. A user without them can
+                  # log in but sees nothing, which is harder to diagnose than a
+                  # missing user, so a role that cannot be found is reported.
+                  for R in $U_ROLES; do
+                    ROLE_ID=$(wget -q -O - --header="Authorization: Bearer ${ADMIN_TOKEN}" \
+                      "${KC_ADMIN_API}/roles/${R}" 2>/dev/null | tr -d '\n\r' \
+                      | grep -o '"id":"[0-9a-f-]*"' | head -1 | cut -d'"' -f4)
+                    if [ -z "$ROLE_ID" ]; then
+                      echo "    WARNING: realm role ${R} does not exist - skipped" >&2
+                      continue
+                    fi
+                    wget -q -O /dev/null --header="Authorization: Bearer ${ADMIN_TOKEN}" \
+                      --header="Content-Type: application/json" \
+                      --post-data="[{\"id\":\"${ROLE_ID}\",\"name\":\"${R}\"}]" \
+                      "${KC_ADMIN_API}/users/${USER_ID}/role-mappings/realm" || true
+                  done
+                  echo "    ${U} created with roles: ${U_ROLES}"
                 fi
                 echo "    ${U} UUID: ${USER_ID}"
 

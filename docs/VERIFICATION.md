@@ -357,14 +357,33 @@ Expected: `[[1]]` (or higher if you submit more than once).
 
 Trigger EOS to read from EHRbase and write OMOP CDM records.
 
-> **Prerequisite:** Athena vocabularies must be loaded and EOS must be configured with
-> `eos.config.omop.athenaVocabulariesPresent=true`. Without vocabularies, concept mapping
-> is skipped and the `measurement` table stays empty.
+> **Prerequisite - vocabularies are not optional.** Load the Athena vocabularies with
+> `scripts/load-vocab.sh` and set `eos.config.omop.athenaVocabulariesPresent=true` BEFORE
+> running the calls below. The person mapping falls back to concept id `0`
+> ("No matching concept") whenever a composition carries no person data, and that row only
+> exists once `CONCEPT.csv` is loaded. Without it `/person` does not merely skip the
+> mapping - it fails outright with HTTP 500 and
+> `TransientPropertyValueException: ... Person.genderConcept -> Concept`.
+> The five core tables (`concept_class`, `domain`, `vocabulary`, `relationship`, `concept`)
+> are enough for this check; the four large ones are only needed for drug/ingredient
+> resolution, and `load-vocab.sh` skips tables that already hold rows.
+
+Both endpoints take either **no body at all** (convert every EHR) or a JSON body listing
+EHR ids. Do not post `{}`: that selects the request-body overload, leaves `Ehrs.ehrIds`
+null and dies with `NullPointerException: Cannot read the array length`.
 
 ```bash
-curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/person
-curl -s -X POST -H "Content-Type: application/json" -d '{}' http://localhost:8082/ehr
+# All EHRs - note there is no -d and no Content-Type header
+curl -s -X POST http://localhost:8082/person
+curl -s -X POST http://localhost:8082/ehr
+
+# Or a specific EHR
+curl -s -X POST -H "Content-Type: application/json"   -d '{"ehrIds":["<ehr_id>"]}' http://localhost:8082/person
+curl -s -X POST -H "Content-Type: application/json"   -d '{"ehrIds":["<ehr_id>"]}' http://localhost:8082/ehr
 ```
+
+Run `/person` first: `/ehr` converts compositions only for EHRs that already have a
+`person` row, and silently reports `"amount of ehrs mapped":0` otherwise.
 
 Verify OMOP output (port-forward PostgreSQL first: `kubectl port-forward svc/postgres-cluster-rw 5432:5432 -n ohs`):
 
@@ -376,7 +395,18 @@ psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM person;"
 psql -h localhost -p 5432 -U eos -d eos_omop -c "SELECT COUNT(*) FROM measurement;"
 ```
 
-Expected after the composition above is processed: `person` count ≥ 1.
+Expected after the composition above is processed: `person` count ≥ 1, and
+`measurement` count **0**.
+
+The empty `measurement` table is not a fault: the bundled blood pressure sample uses
+`openEHR-EHR-OBSERVATION.sample_blood_pressure.v1`, an EHRbase demo archetype that Eos has
+no mapping for. It logs
+`An archetype was found that is not supported, it will be ignored` and moves on. Eos maps
+`openEHR-EHR-OBSERVATION.blood_pressure.v2`; see the list under
+`/workspace/BOOT-INF/classes/mapping_conf/` inside the Eos container for everything it
+covers. To see clinical rows appear, store a composition built on a supported archetype -
+with a `blood_pressure.v2` composition the two components land as OMOP measurements
+(SNOMED 4152194 systolic, 4154790 diastolic, unit concept resolved).
 
 ### Cohort Explorer - End-to-End
 

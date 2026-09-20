@@ -92,6 +92,72 @@
   a.mini-btn.link:hover { background: #4f46e5; }
   a.mini-btn.step { background: var(--border); color: var(--text); }
   a.mini-btn.step:hover { background: #353850; }
+
+/* ── Live pipeline, run-all and extracted results ───────────────────────── */
+.pipeline {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px 10px;
+  margin-bottom: 18px;
+}
+.pipeline-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.pipeline-head h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.pipeline-head .spacer { flex: 1 1 auto; }
+.pipeline svg { width: 100%; height: auto; display: block; }
+/* Stage colours are driven by a class on the <g>, so one rule set covers all. */
+.stg rect, .stg circle { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.stg text { fill: var(--muted); }
+.stg.on rect, .stg.on circle { stroke: var(--green); stroke-width: 2; opacity: 1; }
+.stg.on text { fill: var(--text); }
+.stg.bad rect, .stg.bad circle { stroke: var(--red); stroke-width: 2; opacity: 1; }
+.stg.bad text { fill: var(--red); }
+.edge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.edge.on { stroke: var(--green); }
+
+.carried { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 11.5px; }
+.carried span { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; color: var(--text); }
+.carried b { font-weight: 600; color: var(--muted); font-family: inherit; margin-right: 4px; }
+
+.runlist { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; display: none; }
+.runlist.show { display: block; }
+.runrow {
+  display: grid; grid-template-columns: 22px 1fr auto auto;
+  gap: 10px; align-items: center;
+  padding: 3px 0; font-size: 12.5px;
+}
+.runrow .mark { text-align: center; font-weight: 700; }
+.runrow.pend .mark { opacity: .3; }
+.runrow.pend  { opacity: .5; }
+.runrow.go   .mark { color: var(--yellow); }
+.runrow.done .mark { color: var(--green); }
+.runrow.fail .mark { color: var(--red); }
+.runrow .code, .runrow .ms {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+
+/* Extracted, human-readable result of a step. */
+.facts { margin: 10px 0 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.facts .facts-h {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  padding: 6px 12px; background: rgba(34,197,94,.12); color: var(--green); font-weight: 600;
+}
+.facts.bad .facts-h { background: rgba(239,68,68,.12); color: var(--red); }
+.facts dl { margin: 0; padding: 10px 12px; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+.facts dt { font-size: 11.5px; color: var(--muted); }
+.facts dd {
+  margin: 0; color: var(--text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12.5px; word-break: break-all;
+}
+.facts dd .big { font-size: 15px; font-weight: 600; }
+.facts .note { padding: 0 12px 10px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+details.raw { margin-top: 8px; }
+details.raw > summary { cursor: pointer; font-size: 11.5px; color: var(--muted); padding: 2px 0; }
+details.raw > summary:hover { color: var(--text); }
 </style>
 </head>
 <body>
@@ -124,6 +190,73 @@
 </nav>
 
 <main>
+
+<!-- Live pipeline: reflects what the run has actually proved, on every panel. -->
+<div class="pipeline">
+  <div class="pipeline-head">
+    <h3>End-to-end pipeline</h3>
+    <span class="spacer"></span>
+    <button class="primary" onclick="runAll()" id="runall-btn">&#9654; Run all steps</button>
+    <button class="secondary" onclick="resetRun()">Reset</button>
+  </div>
+
+  <svg viewBox="0 0 880 150" role="img" aria-label="Pipeline: EHRbase feeds Eos into OMOP CDM and openFHIR into FHIR R4; Keycloak guards the Cohort Explorer.">
+    <defs>
+      <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+      </marker>
+    </defs>
+
+    <g class="stg" id="stg-ehrbase">
+      <rect x="8" y="46" width="150" height="58" rx="4"></rect>
+      <text x="22" y="70" font-size="13" font-weight="600">EHRbase</text>
+      <text x="22" y="90" font-size="11">openEHR &middot; steps 1-3</text>
+    </g>
+
+    <path class="edge" id="e-eos"  d="M 158 62 L 196 62 L 196 34 L 236 34" marker-end="url(#pa)"></path>
+    <path class="edge" id="e-fhir" d="M 158 88 L 196 88 L 196 116 L 236 116" marker-end="url(#pa)"></path>
+
+    <g class="stg" id="stg-eos">
+      <rect x="236" y="10" width="132" height="48" rx="4"></rect>
+      <text x="250" y="31" font-size="13" font-weight="600">Eos</text>
+      <text x="250" y="48" font-size="11">ETL &middot; step 4</text>
+    </g>
+    <path class="edge" id="e-omop" d="M 368 34 L 428 34" marker-end="url(#pa)"></path>
+    <g class="stg" id="stg-omop">
+      <rect x="428" y="10" width="168" height="48" rx="4"></rect>
+      <text x="442" y="31" font-size="13" font-weight="600">OMOP CDM</text>
+      <text x="442" y="48" font-size="11">SNOMED-coded rows</text>
+    </g>
+
+    <g class="stg" id="stg-openfhir">
+      <rect x="236" y="92" width="132" height="48" rx="4"></rect>
+      <text x="250" y="113" font-size="13" font-weight="600">openFHIR</text>
+      <text x="250" y="130" font-size="11">mapping &middot; step 7</text>
+    </g>
+    <path class="edge" id="e-r4" d="M 368 116 L 428 116" marker-end="url(#pa)"></path>
+    <g class="stg" id="stg-r4">
+      <rect x="428" y="92" width="168" height="48" rx="4"></rect>
+      <text x="442" y="113" font-size="13" font-weight="600">FHIR R4</text>
+      <text x="442" y="130" font-size="11">LOINC-coded Bundle</text>
+    </g>
+
+    <g class="stg" id="stg-kc">
+      <rect x="656" y="10" width="140" height="48" rx="4"></rect>
+      <text x="670" y="31" font-size="13" font-weight="600">Keycloak</text>
+      <text x="670" y="48" font-size="11">token &middot; step 5</text>
+    </g>
+    <path class="edge" id="e-ce" d="M 726 58 L 726 92" marker-end="url(#pa)"></path>
+    <g class="stg" id="stg-ce">
+      <rect x="656" y="92" width="140" height="48" rx="4"></rect>
+      <text x="670" y="113" font-size="13" font-weight="600">Cohort Expl.</text>
+      <text x="670" y="130" font-size="11">query &middot; step 6</text>
+    </g>
+  </svg>
+
+  <div class="carried" id="carried"><span style="opacity:.5">Nothing run yet &mdash; identifiers appear here as steps pass.</span></div>
+
+  <div class="runlist" id="runlist"></div>
+</div>
 
 <!-- OVERVIEW -->
 <div class="panel active" id="panel-overview">
@@ -202,22 +335,35 @@
   <p class="desc">Set your port-forward addresses and credentials here. Values are stored in memory only and auto-filled into all steps below.</p>
 
   <div class="cors-note">
-    ⚠ Serve from a local HTTP server (serve the <code>docs</code> dir so the bundled template/composition load):<br>
-    <code>python -m http.server 8888 --directory docs</code> → open <code>http://localhost:8888/test-ui/</code>
+    ⚠ <strong>Start the proxy, not a plain file server.</strong> With port-forwards running:<br>
+    <code>python scripts/test-ui-proxy.py</code> → open <code>http://localhost:8888/test-ui/</code>
+  </div>
+
+  <div class="cors-note">
+    Why a proxy: this is a browser page, so every call is subject to CORS. Served from a
+    plain <code>http.server</code>, the page is one origin and each port-forward is another,
+    and only EHRbase and Keycloak send CORS headers at all - Eos, openFHIR and the Cohort
+    Explorer backend send none, so Steps 4, 6 and 7 could never read a response. Eos is the
+    worst of them: its POST is a "simple request", so the conversion <em>does</em> run and
+    only the response is withheld, which looks like a failure that changed nothing.
+    <code>test-ui-proxy.py</code> serves this page and forwards <code>/svc/&lt;name&gt;</code>
+    to each service, so everything shares one origin and CORS never applies. The address
+    fields below are those proxy paths; put absolute URLs there only if you have some other
+    single-origin setup. Behind the ingress/gateway this is all moot - one origin already.
   </div>
 
   <div class="card">
     <h3>Port-Forward Addresses</h3>
     <div class="fields">
       <div class="field-row three">
-        <div><label>EHRbase</label><input id="cfg-ehrbase" value="http://localhost:8080"></div>
-        <div><label>EOS</label><input id="cfg-eos" value="http://localhost:8082"></div>
-        <div><label>Keycloak</label><input id="cfg-kc" value="http://localhost:8083"></div>
+        <div><label>EHRbase</label><input id="cfg-ehrbase" value="/svc/ehrbase"></div>
+        <div><label>EOS</label><input id="cfg-eos" value="/svc/eos"></div>
+        <div><label>Keycloak</label><input id="cfg-kc" value="/svc/keycloak"></div>
       </div>
       <div class="field-row three">
-        <div><label>Cohort Explorer Backend</label><input id="cfg-ceb" value="http://localhost:8084"></div>
-        <div><label>Cohort Explorer Frontend</label><input id="cfg-cef" value="http://localhost:8085"></div>
-        <div><label>openFHIR</label><input id="cfg-fhir" value="http://localhost:8081"></div>
+        <div><label>Cohort Explorer Backend</label><input id="cfg-ceb" value="/svc/ceb"></div>
+        <div><label>Cohort Explorer Frontend</label><input id="cfg-cef" value="/svc/cef"></div>
+        <div><label>openFHIR</label><input id="cfg-fhir" value="/svc/openfhir"></div>
       </div>
     </div>
   </div>
@@ -327,7 +473,8 @@
     <li><strong>POST /person</strong> - maps EHR subjects → OMOP <code>person</code> table. Run this first.</li>
     <li><strong>POST /ehr</strong> - maps compositions → OMOP clinical records (<code>measurement</code>, etc.). Requires persons to exist.</li>
   </ol>
-  <p class="desc" style="margin-top:-8px;">⚠ Without Athena vocabularies loaded and <code>athenaVocabulariesPresent=true</code> in EOS config, concept mapping is skipped and <code>measurement</code> stays empty - that is expected on a default install.</p>
+  <p class="desc" style="margin-top:-8px;">⚠ Athena vocabularies are a hard prerequisite, not a nice-to-have: without the <code>concept</code> table loaded (<code>scripts/load-vocab.sh</code>) <code>/person</code> fails with HTTP 500 <code>TransientPropertyValueException ... Person.genderConcept</code>, because the person mapping falls back to concept id <code>0</code> and that row does not exist yet.</p>
+  <p class="desc" style="margin-top:-8px;">⚠ Even with vocabularies loaded, <code>measurement</code> stays empty for the sample used in Steps 2-3: it is built on <code>openEHR-EHR-OBSERVATION.sample_blood_pressure.v1</code>, a demo archetype Eos has no mapping for ("An archetype was found that is not supported, it will be ignored"). Eos maps <code>blood_pressure.v2</code>. Person, ehr_to_person and visit_occurrence rows still appear.</p>
   <div class="card">
     <h3>Trigger (run in order)</h3>
     <div class="actions">
@@ -401,11 +548,13 @@
     <div class="actions">
       <button class="primary" onclick="fhirQuery('/health', 's7-health')">GET /health</button>
       <button class="secondary" onclick="fhirQuery('/fc/model', 's7-models')">GET /fc/model</button>
+      <button class="primary" onclick="fhirConvert()">Convert composition &rarr; FHIR</button>
       <span class="status" id="s7-status"></span>
     </div>
   </div>
   <div class="response-box" id="s7-health-box" style="display:none"><label>/health</label><pre id="s7-health"></pre></div>
   <div class="response-box" id="s7-models-box" style="display:none"><label>/fc/model</label><pre id="s7-models"></pre></div>
+  <div class="response-box" id="s7-fhir-box" style="display:none"><label>/openfhir/tofhir</label><pre id="s7-fhir-resp"></pre></div>
 </div>
 
 </main>
@@ -431,13 +580,17 @@ function updateOverviewLinks() {
   document.getElementById('lnk-cohort').href   = cfg('cfg-cef');
   document.getElementById('lnk-keycloak').href = cfg('cfg-kc') + '/auth/admin/';
 }
-updateOverviewLinks();
+// Deliberately NOT called here: cfg is declared further down with const, so a
+// call at this point hits the temporal dead zone, throws
+// "Cannot access 'cfg' before initialization", and aborts the rest of this
+// script - which silently disabled every button on the page. The initial call
+// now sits at the end of the script, after all declarations.
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const cfg = k => document.getElementById(k).value.trim();
 const val = k => document.getElementById(k).value.trim();
 const set = (k, v) => { document.getElementById(k).value = v; };
-const showResp = (boxId, preId, data, ok) => {
+let showResp = (boxId, preId, data, ok) => {
   document.getElementById(boxId).style.display = 'block';
   const pre = document.getElementById(preId);
   pre.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
@@ -448,7 +601,7 @@ const setStatus = (id, msg, type) => {
   el.textContent = msg;
   el.className = 'status ' + type;
 };
-const markNav = (id, ok) => {
+let markNav = (id, ok) => {
   const a = document.getElementById('nav-' + id);
   if (!a) return;
   a.classList.remove('done', 'error');
@@ -615,7 +768,16 @@ async function step3() {
 // ── Step 4: EOS ───────────────────────────────────────────────────────────
 async function eosPost(path, boxId, respId) {
   try {
-    const r = await apiFetch(cfg('cfg-eos') + path, { method: 'POST' });
+    // Target the EHR this walkthrough created, when there is one. A POST with
+    // no body converts every EHR in the repository, which makes the counts in
+    // the response say nothing about the composition just stored. Note the
+    // body must carry ehrIds - an empty {} selects the same overload and dies
+    // with a NullPointerException inside Eos.
+    const opts = state.ehrId
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ehrIds: [state.ehrId] }) }
+      : { method: 'POST' };
+    const r = await apiFetch(cfg('cfg-eos') + path, opts);
     document.getElementById(boxId).style.display = 'block';
     showResp(boxId, respId, r.body, r.ok);
     return r.ok;
@@ -704,6 +866,309 @@ async function fhirQuery(path, respId) {
     setStatus('s7-status', '✗ ' + e.message, 'err');
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Live pipeline, run-all, and plain-language results.
+//
+// Everything below hooks the two functions every step already calls -
+// showResp() and markNav() - so no step function needed rewriting, and a
+// manual click produces exactly the same visuals as an automated run.
+// ══════════════════════════════════════════════════════════════════════════
+
+const outcome = {};   // nav id -> boolean, filled by the markNav hook
+const facts = {};     // carried summary values for the pipeline band
+const esc = t => String(t).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+
+const _markNav = markNav;
+markNav = (id, ok) => { _markNav(id, ok); outcome[id] = ok; paintPipeline(); };
+
+const _showResp = showResp;
+showResp = (boxId, preId, data, ok) => {
+  _showResp(boxId, preId, data, ok);
+  // Presentation must never be able to break a step.
+  try { renderFacts(boxId, preId, data, ok); } catch (e) { console.warn('facts', e); }
+};
+
+// ── Pipeline painting ─────────────────────────────────────────────────────
+function stage(id, on, bad) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('on', !!on && !bad);
+  el.classList.toggle('bad', !!bad);
+}
+function edge(id, on) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('on', !!on);
+}
+
+function paintPipeline() {
+  const ehrOk  = outcome.s1 && outcome.s2 && outcome.s3;
+  const anyEhr = outcome.s1 || outcome.s2 || outcome.s3;
+  const ehrBad = [outcome.s1, outcome.s2, outcome.s3].some(v => v === false);
+
+  stage('stg-ehrbase', anyEhr, ehrBad);
+  stage('stg-eos',  outcome.s4, outcome.s4 === false);
+  stage('stg-omop', outcome.s4, outcome.s4 === false);
+  edge('e-eos', ehrOk && outcome.s4);
+  edge('e-omop', outcome.s4);
+
+  stage('stg-openfhir', outcome.s7, outcome.s7 === false);
+  stage('stg-r4', !!facts.fhir, outcome.s7 === false);
+  edge('e-fhir', outcome.s7);
+  edge('e-r4', !!facts.fhir);
+
+  stage('stg-kc', outcome.s5, outcome.s5 === false);
+  stage('stg-ce', outcome.s6, outcome.s6 === false);
+  edge('e-ce', outcome.s5 && outcome.s6);
+
+  const c = [];
+  if (state.ehrId)   c.push(['EHR', state.ehrId]);
+  if (state.compUid) c.push(['Composition', state.compUid]);
+  if (facts.omop)    c.push(['OMOP', facts.omop]);
+  if (facts.fhir)    c.push(['FHIR', facts.fhir]);
+  if (state.token)   c.push(['Token', (facts.user ? facts.user + ', ' : '') + state.token.length + ' chars']);
+
+  const bar = document.getElementById('carried');
+  bar.innerHTML = c.length
+    ? c.map(pair => '<span><b>' + pair[0] + '</b> ' + esc(pair[1]) + '</span>').join('')
+    : '<span style="opacity:.5">Nothing run yet &mdash; identifiers appear here as steps pass.</span>';
+}
+
+// ── Extracted results ─────────────────────────────────────────────────────
+// Returns { title, rows: [[label, value, emphasise?]], note? } or null.
+function extract(preId, d, ok) {
+  const q = (o, path) => path.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+
+  if (preId === 's1-resp' && ok) {
+    return { title: 'EHR created',
+             rows: [['EHR id', q(d, 'ehr_id.value') || '-'],
+                    ['Subject', val('s1-patient-id')]] };
+  }
+
+  if (preId === 's2-resp') {
+    const already = String(d).indexOf('409') > -1;
+    return { title: ok ? 'Operational template accepted' : 'Template rejected',
+             rows: [['Template', 'ehrbase_blood_pressure_simple.de.v0']],
+             note: already ? 'HTTP 409 - already present. Uploading is idempotent, so this counts as a pass.' : null };
+  }
+
+  if (preId === 's3-resp' && ok) {
+    return { title: 'Composition stored in EHRbase',
+             rows: [['Reading', val('s3-sys') + ' / ' + val('s3-dia') + ' mm[Hg]', true],
+                    ['Version UID', q(d, 'uid.value') || '-'],
+                    ['Archetype', 'openEHR-EHR-OBSERVATION.sample_blood_pressure.v1']],
+             note: 'Eos maps blood_pressure.v2. This bundled demo archetype is not in its mapping set, so it produces person and visit rows but no measurement rows.' };
+  }
+
+  if (preId === 's4-person-resp' && ok) {
+    const arr = Array.isArray(d) ? d : [d];
+    const p0 = arr.find(x => x && x.ehrId === state.ehrId) || arr[0] || {};
+    const g = q(p0, 'person.genderConcept.id');
+    return { title: 'Subject mapped to an OMOP person',
+             rows: [['person_id', q(p0, 'person.id') === undefined ? '-' : q(p0, 'person.id')],
+                    ['ehr_id', q(p0, 'ehrId') || '-'],
+                    ['gender_concept', g === undefined ? '-' : g]],
+             note: g === 0 ? 'Concept 0 is "No matching concept": the composition carries no person data, so the mapping falls back. That row exists only once the Athena vocabulary is loaded.' : null };
+  }
+
+  if (preId === 's4-ehr-resp' && ok) {
+    const added = d['amount of clinical data table rows added'];
+    facts.omop = (added === undefined ? '?' : added) + ' CDM rows';
+    return { title: 'OMOP CDM written',
+             rows: [['EHRs mapped', d['amount of ehrs mapped'] === undefined ? '-' : d['amount of ehrs mapped']],
+                    ['Compositions', d['amount of compositions mapped'] === undefined ? '-' : d['amount of compositions mapped']],
+                    ['CDM rows added', added === undefined ? '-' : added, true]],
+             note: 'The values themselves live in the eos_omop database, not in this response - Eos exposes no read API for the CDM. Read them back with psql against the measurement table joined to concept.' };
+  }
+
+  if (preId === 's5-resp' && ok && state.token) {
+    let user = '-', roles = [];
+    try {
+      const pl = JSON.parse(atob(state.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      user = pl.preferred_username || '-';
+      roles = ((pl.realm_access || {}).roles || []).filter(r => r === r.toUpperCase() && r.indexOf('_') > -1);
+    } catch (e) { /* the token shape is not ours to guarantee */ }
+    facts.user = user;
+    return { title: 'Access token issued',
+             rows: [['User', user, true],
+                    ['Realm roles', roles.join(', ') || '-'],
+                    ['Length', state.token.length + ' characters']] };
+  }
+
+  if (preId && preId.indexOf('s6-') === 0 && ok) {
+    let n = null;
+    if (Array.isArray(d)) n = d.length;
+    else if (d && Array.isArray(d.content)) n = d.content.length;
+    return { title: 'Cohort Explorer answered',
+             rows: [['Authorisation', 'Bearer token accepted'],
+                    ['Items returned', n === null ? '-' : n]],
+             note: n === 0 ? 'An empty list is a pass: the portal authorised the user, it simply holds no data yet.' : null };
+  }
+
+  if (preId === 's7-fhir-resp' && ok && d && d.entry) {
+    const rows = [['Bundle entries', d.entry.length]];
+    d.entry.forEach(e => {
+      const comps = (e.resource || {}).component || [];
+      comps.forEach(c => {
+        const coding = ((c.code || {}).coding || [])[0] || {};
+        const v = c.valueQuantity || {};
+        if (coding.code && v.value !== undefined && v.value !== null) {
+          rows.push(['LOINC ' + coding.code, v.value + ' ' + (v.unit || ''), true]);
+        }
+      });
+    });
+    facts.fhir = d.entry.length + ' Observation(s)';
+    return { title: 'openEHR converted to FHIR R4', rows,
+             note: '8480-6 is systolic, 8462-4 diastolic - the same reading the composition carries, re-coded in LOINC instead of the archetype path.' };
+  }
+
+  return null;
+}
+
+function renderFacts(boxId, preId, d, ok) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+
+  // Demote the raw payload to a disclosure the first time a box is used.
+  const pre = document.getElementById(preId);
+  if (pre && !pre.closest('details.raw')) {
+    const det = document.createElement('details');
+    det.className = 'raw';
+    det.innerHTML = '<summary>Raw response</summary>';
+    pre.parentNode.insertBefore(det, pre);
+    det.appendChild(pre);
+  }
+
+  const f = extract(preId, d, ok);
+  let host = document.getElementById(boxId + '-facts');
+  if (!f) { if (host) host.remove(); paintPipeline(); return; }
+  if (!host) {
+    host = document.createElement('div');
+    host.id = boxId + '-facts';
+    box.insertBefore(host, box.firstChild);
+  }
+  host.className = 'facts' + (ok ? '' : ' bad');
+  host.innerHTML = '<div class="facts-h">' + esc(f.title) + '</div><dl>' +
+    f.rows.map(r => '<dt>' + esc(r[0]) + '</dt><dd>' +
+      (r[2] ? '<span class="big">' + esc(r[1]) + '</span>' : esc(r[1])) + '</dd>').join('') +
+    '</dl>' + (f.note ? '<div class="note">' + esc(f.note) + '</div>' : '');
+  paintPipeline();
+}
+
+// ── Step 7: the conversion itself ─────────────────────────────────────────
+// Built from the same systolic/diastolic values step 3 used, so the two target
+// models are shown carrying one reading rather than two unrelated fixtures.
+async function fhirConvert() {
+  const sys = parseFloat(val('s3-sys'));
+  const dia = parseFloat(val('s3-dia'));
+  const dt = val('s3-datetime') || '2024-01-15T10:00:00Z';
+  const flat = {
+    'blood_pressure/category|code': '433',
+    'blood_pressure/category|value': 'event',
+    'blood_pressure/category|terminology': 'openehr',
+    'blood_pressure/context/start_time': dt,
+    'blood_pressure/context/setting|code': '238',
+    'blood_pressure/context/setting|value': 'other care',
+    'blood_pressure/context/setting|terminology': 'openehr',
+    'blood_pressure/language|code': 'en',
+    'blood_pressure/language|terminology': 'ISO_639-1',
+    'blood_pressure/territory|code': 'DE',
+    'blood_pressure/territory|terminology': 'ISO_3166-1',
+    'blood_pressure/composer|name': 'OHS test console',
+    'blood_pressure/blood_pressure/any_event:0/time': dt,
+    'blood_pressure/blood_pressure/any_event:0/systolic|magnitude': isNaN(sys) ? 120 : sys,
+    'blood_pressure/blood_pressure/any_event:0/systolic|unit': 'mm[Hg]',
+    'blood_pressure/blood_pressure/any_event:0/diastolic|magnitude': isNaN(dia) ? 80 : dia,
+    'blood_pressure/blood_pressure/any_event:0/diastolic|unit': 'mm[Hg]'
+  };
+
+  setStatus('s7-status', 'Converting...', 'running');
+  try {
+    const url = cfg('cfg-fhir') + '/openfhir/tofhir?templateId=' + encodeURIComponent('Blood Pressure');
+    const r = await apiFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(flat)
+    });
+    showResp('s7-fhir-box', 's7-fhir-resp', r.body, r.ok);
+    if (r.ok) {
+      setStatus('s7-status', '✓ Converted to FHIR R4', 'ok');
+      markNav('s7', true);
+    } else {
+      const needsMapping = String(r.raw || '').indexOf('Context Mapper') > -1;
+      setStatus('s7-status', needsMapping
+        ? '✗ No FhirConnect mapping loaded for template "Blood Pressure"'
+        : '✗ HTTP ' + r.status, 'err');
+      markNav('s7', false);
+    }
+  } catch (e) {
+    showResp('s7-fhir-box', 's7-fhir-resp', e.message, false);
+    setStatus('s7-status', '✗ ' + e.message, 'err');
+    markNav('s7', false);
+  }
+}
+
+// ── Run all ───────────────────────────────────────────────────────────────
+const SEQUENCE = [
+  { key: 's1', label: '1   Create EHR',           fn: step1 },
+  { key: 's2', label: '2   Upload template',      fn: async () => { await loadBundledTemplate(); await step2(); } },
+  { key: 's3', label: '3   Submit composition',   fn: step3 },
+  { key: 's4', label: '4a  Eos /person',          fn: step4person },
+  { key: 's4', label: '4b  Eos /ehr',             fn: step4ehr },
+  { key: 's5', label: '5   Keycloak token',       fn: step5 },
+  { key: 's6', label: '6   Cohort Explorer',      fn: () => s6query('/organization/all', 's6-orgs') },
+  { key: 's7', label: '7   openFHIR conversion',  fn: fhirConvert }
+];
+
+function resetRun() {
+  Object.keys(outcome).forEach(k => { delete outcome[k]; });
+  Object.keys(facts).forEach(k => { delete facts[k]; });
+  state.ehrId = null; state.compUid = null; state.token = null;
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('done', 'error'));
+  document.querySelectorAll('.facts').forEach(el => el.remove());
+  document.querySelectorAll('.response-box').forEach(el => { el.style.display = 'none'; });
+  document.querySelectorAll('.status').forEach(el => { el.textContent = ''; el.className = 'status'; });
+  const list = document.getElementById('runlist');
+  list.classList.remove('show');
+  list.innerHTML = '';
+  // A fresh subject id: EHRbase rejects a second EHR for the same external ref.
+  set('s1-patient-id', 'patient-test-' + String(Date.now()).slice(-6));
+  paintPipeline();
+}
+
+async function runAll() {
+  const btn = document.getElementById('runall-btn');
+  const list = document.getElementById('runlist');
+  btn.disabled = true;
+  list.classList.add('show');
+  list.innerHTML = SEQUENCE.map((s, i) =>
+    '<div class="runrow pend" id="rr' + i + '"><span class="mark">&middot;</span><span>' +
+    esc(s.label) + '</span><span class="code"></span><span class="ms"></span></div>').join('');
+
+  for (let i = 0; i < SEQUENCE.length; i++) {
+    const row = document.getElementById('rr' + i);
+    row.className = 'runrow go';
+    row.querySelector('.mark').textContent = '▸';
+    const t0 = performance.now();
+    try {
+      await SEQUENCE[i].fn();
+    } catch (e) {
+      // Each step reports its own failure through markNav; keep the run going
+      // so a later independent step still gets exercised.
+      console.warn(SEQUENCE[i].label, e);
+    }
+    const ms = performance.now() - t0;
+    const ok = outcome[SEQUENCE[i].key];
+    row.className = 'runrow ' + (ok ? 'done' : 'fail');
+    row.querySelector('.mark').textContent = ok ? '✓' : '✗';
+    row.querySelector('.ms').textContent = (ms / 1000).toFixed(1) + ' s';
+  }
+  btn.disabled = false;
+}
+
+updateOverviewLinks();
+paintPipeline();
+
 </script>
 </body>
 </html>

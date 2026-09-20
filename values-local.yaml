@@ -15,6 +15,33 @@ postgres:
     enabled: true
   ehrbase:
     instances: 1
+    # values.yaml is sized for the production cluster (450Gi, 12Gi RAM,
+    # 4GB shared_buffers). Docker Desktop's hostpath StorageClass reports
+    # ALLOWVOLUMEEXPANSION=false, so a size change on an existing PVC cannot be
+    # applied at all. The values below match the running cluster spec exactly,
+    # which keeps a helm upgrade from attempting a resize or an instance restart.
+    storage: "10Gi"
+    walStorage: "5Gi"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    # Matches the live spec. shared_buffers must stay at or below the memory
+    # request - the CNPG admission webhook rejects the cluster otherwise.
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+      effective_cache_size: "1GB"
+      maintenance_work_mem: "64MB"
+      work_mem: "1280kB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
 
 mongodb:
   enabled: true
@@ -46,6 +73,11 @@ ehrbase:
   config:
     database:
       host: "postgres-cluster-rw"
+    # values.yaml sets 4g for a 6Gi container; the local limit above is 2Gi, and
+    # a heap larger than the limit gets the container OOM-killed under load.
+    jvm:
+      maxHeapSize: "1g"
+      minHeapSize: "512m"
 
 openfhir:
   replicaCount: 1
@@ -86,6 +118,12 @@ eos:
       host: "postgres-cluster-rw"
     ehrbase:
       baseUrl: "http://ohs-ehrbase:8080/ehrbase/"
+    # Core Athena vocabulary (concept_class, domain, vocabulary, relationship,
+    # concept) loaded 2026-09-19 via scripts/load-vocab.sh. Without concept 0
+    # ("No matching concept") the person mapping cannot persist a row at all -
+    # Hibernate rejects Person.genderConcept as a transient instance.
+    omop:
+      athenaVocabulariesPresent: true
     jvm:
       maxHeapSize: "1g"
 
@@ -102,7 +140,8 @@ ehrsuction:
   suspend: true
   backoffLimit: 1
   config:
-    baseUrl: "http://ohs-ehrbase:8080/ehrbase"
+    # Server root WITHOUT /ehrbase - EHRsuction appends the REST path itself.
+    baseUrl: "http://ohs-ehrbase:8080"
     platform: "EHRBASE"
     exportType: "CANONICAL"
     steps: 5000
@@ -223,13 +262,18 @@ openehrtool-frontend:
 keycloak:
   enabled: true
   replicaCount: 1
+  # 2Gi was not enough: kc.sh runs a Quarkus augmentation build on every start,
+  # and the JVM sizes its heap at MaxRAMPercentage=70 of the limit. Build heap
+  # plus metaspace plus the realm import exceeded 2Gi and the container was
+  # OOMKilled (exit 137) before it ever served a request, which in turn left
+  # cohort-explorer-backend stuck in its wait-for-keycloak init container.
   resources:
     requests:
       cpu: "500m"
       memory: "1Gi"
     limits:
-      cpu: "1000m"
-      memory: "2Gi"
+      cpu: "2000m"
+      memory: "4Gi"
   livenessProbe:
     enabled: false
   readinessProbe:
